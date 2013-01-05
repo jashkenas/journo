@@ -1,0 +1,16 @@
+{
+  "name": "journo",
+  "version": "0.0.1",
+  "description": "Blog like it's 1999",
+  "main": "journo.js",
+  "dependencies": {
+    "marked": ">= 0.2.6"
+  },
+  "devDependencies": {},
+  "repository": "",
+  "keywords": [
+    "blog"
+  ],
+  "author": "Jeremy Ashkenas",
+  "license": "MIT"
+}
