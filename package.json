@@ -4,8 +4,11 @@
   "description": "Blog like it's 1999",
   "main": "journo.js",
   "dependencies": {
+    "underscore": ">= 1.4.3",
     "marked": ">= 0.2.6",
-    "ftp": ">= 0.2.8"
+    "ftp": ">= 0.2.8",
+    "highlight": ">= 0.2.3",
+    "rss": ">= 0.0.4"
   },
   "devDependencies": {},
   "repository": "",

@@ -1,5 +1,5 @@
 Journo
-------
+======
 
     Journo = module.exports = {}
 
@@ -27,18 +27,20 @@ Journo is a blogging program, with a few basic goals. To wit:
 
 
 Write in Markdown
-=================
+-----------------
 
-We'll use the excellent `marked` module to compile Markdown into HTML.
+We'll use the excellent `marked` module to compile Markdown into HTML, and
+Underscore for many of its goodies later on.
 
     marked = require 'marked'
+    _ = require 'underscore'
 
     Journo.markdown = (source) ->
       marked.parser marked.lexer source
 
 
 Publish to Flat Files
-=====================
+---------------------
 
 A blog is a folder on your hard drive. Within the blog, you have a `posts`
 folder for blog posts, and a `journo.json` file for configuration.
@@ -46,31 +48,36 @@ folder for blog posts, and a `journo.json` file for configuration.
     fs = require 'fs'
     FTPClient = require 'ftp'
     ftp = new FTPClient
-
-    configuration = manifest = null
+    manifest = null
 
     Journo.publish = ->
-      configuration = loadConfiguration()
       manifest = loadManifest()
       posts = fs.readdirSync 'posts'
       todo = compareManifest posts
-      ftp.connect configuration
+      ftp.connect config.ftp
       Journo.publishPost post for post in todo.puts
       Journo.unpublishPost post for post in todo.deletes
       ftp.end()
       writeManifest()
       yes
 
-The `journo.json` configuration file is where you keep the nitty gritty details,
+The `config.json` configuration file is where you keep the nitty gritty details,
 like how to connect to your FTP server. The settings are: `host`, `port`,
 `secure`, `user`, and `password`.
 
-    loadConfiguration = ->
-      JSON.parse fs.readFileSync 'journo.json'
+    config = JSON.parse fs.readFileSync 'config.json'
+    siteUrl = config.url.replace(/\/$/, '')
+
+For convenience, keep functions handy for finding the local file path to a post,
+and the URL for a post on the server.
+
+    postPath = (post) -> "posts/#{post}"
+
+    postUrl = (post) -> "#{siteUrl}/#{post}"
 
 
 Publish Via FTP or S3
-=====================
+---------------------
 
 To publish a post, we render it and FTP it up.
 
@@ -84,7 +91,7 @@ To unpublish a post, we delete it via FTP.
 
 
 Maintains its own Manifest File
-==============================
+-------------------------------
 
 The "manifest" is where Journo keeps track of metadata (the publication date
 and last recorded modified time) about each post.
@@ -123,27 +130,60 @@ that need to be `PUT` to the server, and the posts that should be `DELETE`d.
 
 
 Retina Ready
-============
+------------
 
 
 Can Syntax Highlight Code
-=========================
+-------------------------
+
+    {Highlight} = require 'highlight'
+
+    marked.setOptions
+      highlight: (code, lang) ->
+        Highlight code
 
 
 Can Create Photo Slideshows
-===========================
+---------------------------
 
 
 Can Handle Minimal Metadata
-===========================
+---------------------------
 
 
 Publishes a Feed
-================
+----------------
+
+    RSS = require 'rss'
+
+    Journo.feed = ->
+      feed = new RSS
+        title: config.title
+        description: config.description
+        feed_url: "#{siteUrl}/rss.xml"
+        site_url: siteUrl
+        author: config.author
+
+      sorted = _.sortBy _.keys(manifest), (post) -> manifest[post].pubtime
+
+      for post in sorted[0...20]
+        content = fs.readFileSync postPath post
+        lexed = marked.lexer content
+        title = _.find lexed, (token) -> token.type is 'heading'
+        description = _.find lexed, (token) -> token.type is 'paragraph'
+
+        feed.item
+          title: title
+          description: description
+          url: postUrl post
+          date: manifest[post].pubtime
+
+      feed.xml()
+
 
 
 Works Without JavaScript, But has a Fluid JavaScript-Enabled UI
-===============================================================
+---------------------------------------------------------------
 
 
 
