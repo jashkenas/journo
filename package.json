@@ -2,13 +2,16 @@
   "name": "journo",
   "version": "0.0.1",
   "description": "Blog like it's 1999",
+  "bin": {"journo": "./bin/journo"},
   "main": "journo.js",
   "dependencies": {
     "underscore": ">= 1.4.3",
     "marked": ">= 0.2.6",
     "ftp": ">= 0.2.8",
+    "knox": ">= 0.4.6",
     "highlight": ">= 0.2.3",
-    "rss": ">= 0.0.4"
+    "rss": ">= 0.0.4",
+    "ncp": ">= 0.2.6"
   },
   "devDependencies": {},
   "repository": "",

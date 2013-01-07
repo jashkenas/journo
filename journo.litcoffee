@@ -11,17 +11,21 @@ Journo is a blogging program, with a few basic goals. To wit:
 
 * Publish via (S)FTP or S3.
 
-* Maintain its own manifest file (what's published and what isn't, pub dates).
+* Maintain a manifest file (what's published and what isn't, pub dates).
 
 * Retina ready.
 
-* Can syntax highlight code and handle large photo slideshows.
+* Syntax highlight code and handle large photo slideshows.
 
-* Can handle minimal metadata (photos have captions, posts have titles).
+* Handle minimal metadata (photos have captions, posts have titles).
 
-* Publishes a feed.
+* Publish a feed.
 
-* Works without JavaScript, but has a fluid JavaScript-enabled UI.
+* Quickly bootstrap a new blog.
+
+* Preview via a local server.
+
+* Work without JavaScript, but default to a fluid JavaScript-enabled UI.
 
 ... let's go through these one at a time:
 
@@ -46,12 +50,14 @@ A blog is a folder on your hard drive. Within the blog, you have a `posts`
 folder for blog posts, and a `journo.json` file for configuration.
 
     fs = require 'fs'
-    FTPClient = require 'ftp'
-    ftp = new FTPClient
-    manifest = null
+    path = require 'path'
+    ftp = config = siteUrl = manifest = null
 
     Journo.publish = ->
-      manifest = loadManifest()
+      FTPClient = require 'ftp'
+      ftp = new FTPClient
+      loadConfig()
+      loadManifest()
       posts = fs.readdirSync 'posts'
       todo = compareManifest posts
       ftp.connect config.ftp
@@ -65,8 +71,10 @@ The `config.json` configuration file is where you keep the nitty gritty details,
 like how to connect to your FTP server. The settings are: `host`, `port`,
 `secure`, `user`, and `password`.
 
-    config = JSON.parse fs.readFileSync 'config.json'
-    siteUrl = config.url.replace(/\/$/, '')
+    loadConfig = ->
+      return if config
+      config = JSON.parse fs.readFileSync 'config.json'
+      siteUrl = config.url.replace(/\/$/, '')
 
 For convenience, keep functions handy for finding the local file path to a post,
 and the URL for a post on the server.
@@ -76,22 +84,43 @@ and the URL for a post on the server.
     postUrl = (post) -> "#{siteUrl}/#{post}"
 
 
-Publish Via FTP or S3
----------------------
+Publish Via FTP
+---------------
+
+    Journo.FTP = {}
 
 To publish a post, we render it and FTP it up.
 
-    Journo.publishPost = (post) ->
+    Journo.FTP.publishPost = (post) ->
       throw 'TK'
 
 To unpublish a post, we delete it via FTP.
 
-    Journo.unpublishPost = (post) ->
+    Journo.FTP.unpublishPost = (post) ->
       throw 'TK'
 
 
-Maintains its own Manifest File
--------------------------------
+Publish Via S3
+--------------
+
+We'll use the `knox` library to connect to S3.
+
+    Journo.S3 = {}
+    knox = require 'knox'
+    s3 = null
+
+    Journo.S3.connect = ->
+      loadConfig()
+      s3 or= knox.createClient config.s3
+
+To publish a post, we render it and `PUT` it to S3.
+
+    Journo.S3.publishPost = (post) ->
+      client = Journo.S3.connect()
+
+
+Maintain a Manifest File
+------------------------
 
 The "manifest" is where Journo keeps track of metadata (the publication date
 and last recorded modified time) about each post.
@@ -101,7 +130,7 @@ and last recorded modified time) about each post.
     emptyManifest = posts: {}, published: null
 
     loadManifest = ->
-      if fs.existsSync manifestPath
+      manifest = if fs.existsSync manifestPath
         JSON.parse fs.readFileSync manifestPath
       else
         emptyManifest
@@ -133,8 +162,8 @@ Retina Ready
 ------------
 
 
-Can Syntax Highlight Code
--------------------------
+Syntax Highlight Code
+---------------------
 
     {Highlight} = require 'highlight'
 
@@ -143,20 +172,21 @@ Can Syntax Highlight Code
         Highlight code
 
 
-Can Create Photo Slideshows
----------------------------
+Create Photo Slideshows
+-----------------------
 
 
-Can Handle Minimal Metadata
----------------------------
+Handle Minimal Metadata
+-----------------------
 
 
-Publishes a Feed
-----------------
-
-    RSS = require 'rss'
+Publish a Feed
+--------------
 
     Journo.feed = ->
+      RSS = require 'rss'
+      loadConfig()
+
       feed = new RSS
         title: config.title
         description: config.description
@@ -181,9 +211,42 @@ Publishes a Feed
       feed.xml()
 
 
+Quickly Bootstrap a New Blog
+----------------------------
 
-Works Without JavaScript, But has a Fluid JavaScript-Enabled UI
----------------------------------------------------------------
+    Journo.init = ->
+      here = fs.realpathSync '.'
+      if fs.existsSync 'posts'
+        return console.error "A blog already exists in #{here}"
+      bootstrap = path.join(__dirname, 'bootstrap')
+      require('ncp').ncp bootstrap, '.', (err) ->
+        return console.error(err) if err
+        console.log "Initialized new blog in #{here}"
+
+
+
+Preview via a Local Server
+--------------------------
+
+    Journo.preview = ->
+      http = require 'http'
+      'TK'
+
+
+Work Without JavaScript, But Default to a Fluid JavaScript-Enabled UI
+---------------------------------------------------------------------
+
+
+Finally, Putting it all Together. Run Journo From the Terminal
+--------------------------------------------------------------
+
+    Journo.run = ->
+      args = process.argv.slice 2
+      command = args[0]
+      if Journo[command]
+        do Journo[command]
+      else
+        console.error "Journo doesn't know how to '#{command}'"
 
 
 

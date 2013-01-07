@@ -1,0 +1,22 @@
+{
+  "title": "Title TK",
+  "description": "A Description for the RSS of My Blog",
+  "author": "Me",
+  "url": "http://example.com/blog",
+
+  "ftp": {
+    "host": "mywebhost.com",
+    "port": "22",
+    "path": "blog",
+    "secure": false,
+    "user": "admin",
+    "password": "password",
+  },
+
+  "s3": {
+    "key": "my amazon AWS key",
+    "secret": "my amazon AWS secret",
+    "bucket": "my bucket",
+    "path": "blog"
+  }
+}
