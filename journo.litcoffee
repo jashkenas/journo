@@ -38,9 +38,15 @@ Underscore for many of its goodies later on.
 
     marked = require 'marked'
     _ = require 'underscore'
+    skeleton = null
 
-    Journo.markdown = (source) ->
-      marked.parser marked.lexer source
+    Journo.render = (source) ->
+      skeleton or= _.template(fs.readFileSync('skeleton.html').toString())
+      markdown = source = _.template(source.toString())({})
+      lexed = marked.lexer markdown
+      title = _.find lexed, (token) -> token.type is 'heading'
+      content = marked.parser lexed
+      skeleton {title, content}
 
 
 Publish to Flat Files
@@ -56,16 +62,26 @@ folder for blog posts, and a `journo.json` file for configuration.
     Journo.publish = ->
       FTPClient = require 'ftp'
       ftp = new FTPClient
-      loadConfig()
-      loadManifest()
-      posts = fs.readdirSync 'posts'
-      todo = compareManifest posts
+      Journo.build()
+      todo = compareManifest allPosts()
       ftp.connect config.ftp
+      Journo.publishPage
       Journo.publishPost post for post in todo.puts
       Journo.unpublishPost post for post in todo.deletes
       ftp.end()
       writeManifest()
       yes
+
+In order to `build` the blog, we render all of the posts out as HTML on disk.
+
+    Journo.build = ->
+      loadConfig()
+      loadManifest()
+      fs.mkdirSync('site') unless fs.existsSync('site')
+      for post in allPosts()
+        markdown = fs.readFileSync postPath post
+        html = Journo.render markdown
+        fs.writeFileSync "site/#{path.basename(post, '.md')}.html", html
 
 The `config.json` configuration file is where you keep the nitty gritty details,
 like how to connect to your FTP server. The settings are: `host`, `port`,
@@ -73,7 +89,10 @@ like how to connect to your FTP server. The settings are: `host`, `port`,
 
     loadConfig = ->
       return if config
-      config = JSON.parse fs.readFileSync 'config.json'
+      try
+        config = JSON.parse fs.readFileSync 'config.json'
+      catch err
+        fatal "Unable to read config.json"
       siteUrl = config.url.replace(/\/$/, '')
 
 For convenience, keep functions handy for finding the local file path to a post,
@@ -82,6 +101,14 @@ and the URL for a post on the server.
     postPath = (post) -> "posts/#{post}"
 
     postUrl = (post) -> "#{siteUrl}/#{post}"
+
+    allPosts = -> fs.readdirSync 'posts'
+
+Quick helper for any fatal errors that might be encountered during a build.
+
+    fatal = (message) ->
+      console.error message
+      process.exit 1
 
 
 Publish Via FTP
@@ -117,6 +144,18 @@ To publish a post, we render it and `PUT` it to S3.
 
     Journo.S3.publishPost = (post) ->
       client = Journo.S3.connect()
+      throw 'content TK'
+
+      request = client.put path.join(config.s3.path, post),
+        'Content-Length': content.length
+        'Content-Type': 'text/html'
+        'x-amz-acl': 'public-read'
+
+      request.on 'response', (response) ->
+        if response.statusCode is 200
+          console.log "PUT #{post}"
+
+      request.end content
 
 
 Maintain a Manifest File
@@ -230,7 +269,29 @@ Preview via a Local Server
 
     Journo.preview = ->
       http = require 'http'
-      'TK'
+      mime = require 'mime'
+      url = require 'url'
+      util = require 'util'
+      server = http.createServer (req, res) ->
+        path = url.parse(req.url).pathname.replace /^\//, ''
+        publicPath = "public/#{path}"
+        fs.exists publicPath, (exists) ->
+          if exists
+            res.writeHead 200, 'Content-Type': mime.lookup(publicPath)
+            fs.createReadStream(publicPath).pipe res
+          else
+            post = "posts/#{path}.md"
+            fs.exists post, (exists) ->
+              if exists
+                fs.readFile post, (err, content) ->
+                  res.writeHead 200, 'Content-Type': 'text/html'
+                  res.end Journo.render content
+              else
+                res.writeHead 404
+                res.end '404 Not Found'
+
+      server.listen 1234
+      console.log "Journo is previewing at http://localhost:1234"
 
 
 Work Without JavaScript, But Default to a Fluid JavaScript-Enabled UI
@@ -242,7 +303,7 @@ Finally, Putting it all Together. Run Journo From the Terminal
 
     Journo.run = ->
       args = process.argv.slice 2
-      command = args[0]
+      command = args[0] or 'preview'
       if Journo[command]
         do Journo[command]
       else

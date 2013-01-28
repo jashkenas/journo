@@ -10,7 +10,7 @@
     "path": "blog",
     "secure": false,
     "user": "admin",
-    "password": "password",
+    "password": "password"
   },
 
   "s3": {
