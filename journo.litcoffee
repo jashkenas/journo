@@ -44,7 +44,7 @@ Underscore for many of its goodies later on.
       skeleton or= _.template(fs.readFileSync('skeleton.html').toString())
       markdown = source = _.template(source.toString())({})
       lexed = marked.lexer markdown
-      title = _.find lexed, (token) -> token.type is 'heading'
+      title = _.find(lexed, (token) -> token.type is 'heading')?.text
       content = marked.parser lexed
       skeleton {title, content}
 
@@ -57,6 +57,7 @@ folder for blog posts, and a `journo.json` file for configuration.
 
     fs = require 'fs'
     path = require 'path'
+    {ncp} = require 'ncp'
     ftp = config = siteUrl = manifest = null
 
     Journo.publish = ->
@@ -64,11 +65,10 @@ folder for blog posts, and a `journo.json` file for configuration.
       ftp = new FTPClient
       Journo.build()
       todo = compareManifest allPosts()
+      ftp.on 'ready', ->
+        Journo.publishPost post for post in todo.puts
+        Journo.unpublishPost post for post in todo.deletes
       ftp.connect config.ftp
-      Journo.publishPage
-      Journo.publishPost post for post in todo.puts
-      Journo.unpublishPost post for post in todo.deletes
-      ftp.end()
       writeManifest()
       yes
 
@@ -78,10 +78,15 @@ In order to `build` the blog, we render all of the posts out as HTML on disk.
       loadConfig()
       loadManifest()
       fs.mkdirSync('site') unless fs.existsSync('site')
+      ncp 'public', 'site', (err) ->
+        throw err if err
       for post in allPosts()
         markdown = fs.readFileSync postPath post
         html = Journo.render markdown
-        fs.writeFileSync "site/#{path.basename(post, '.md')}.html", html
+        name = path.basename(post, '.md')
+        dir = "site/#{name}"
+        fs.mkdirSync dir unless fs.existsSync dir
+        fs.writeFileSync "#{dir}/index.html", html
 
 The `config.json` configuration file is where you keep the nitty gritty details,
 like how to connect to your FTP server. The settings are: `host`, `port`,
@@ -119,7 +124,9 @@ Publish Via FTP
 To publish a post, we render it and FTP it up.
 
     Journo.FTP.publishPost = (post) ->
-      throw 'TK'
+      fs.readFile postPath(post), (err, content) ->
+        ftp.put new Buffer(Journo.render(content)), post, (err) ->
+          throw err if err
 
 To unpublish a post, we delete it via FTP.
 
@@ -258,7 +265,7 @@ Quickly Bootstrap a New Blog
       if fs.existsSync 'posts'
         return console.error "A blog already exists in #{here}"
       bootstrap = path.join(__dirname, 'bootstrap')
-      require('ncp').ncp bootstrap, '.', (err) ->
+      ncp bootstrap, '.', (err) ->
         return console.error(err) if err
         console.log "Initialized new blog in #{here}"
 
