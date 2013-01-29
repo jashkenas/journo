@@ -38,37 +38,44 @@ Underscore for many of its goodies later on.
 
     marked = require 'marked'
     _ = require 'underscore'
-    skeleton = null
+    shared = {}
+
+A Journo site has a layout file, stored in `layout.html`. To render a post, we
+take its raw **source**, treat it as both an Underscore template (for HTML
+generation) and as Markdown (for formatting), and insert it into the layout
+as `content`.
 
     Journo.render = (source) ->
-      skeleton or= _.template(fs.readFileSync('skeleton.html').toString())
-      markdown = source = _.template(source.toString())({})
-      lexed = marked.lexer markdown
-      title = _.find(lexed, (token) -> token.type is 'heading')?.text
-      content = marked.parser lexed
-      skeleton {title, content}
+      catchErrors ->
+        shared.layout or= _.template(fs.readFileSync('layout.html').toString())
+        markdown  = _.template(source.toString())({fs})
+        lexed     = marked.lexer markdown
+        title     = _.find(lexed, (token) -> token.type is 'heading')?.text
+        content   = marked.parser lexed
+        shared.layout {title, content}
 
 
 Publish to Flat Files
 ---------------------
 
 A blog is a folder on your hard drive. Within the blog, you have a `posts`
-folder for blog posts, and a `journo.json` file for configuration.
+folder for blog posts, a `public` folder for static content, a `layout.html`
+file, and a `journo.json` file for configuration. During a `build`, a static
+version of the site is rendered into the `site` folder.
 
     fs = require 'fs'
     path = require 'path'
     {ncp} = require 'ncp'
-    ftp = config = siteUrl = manifest = null
 
     Journo.publish = ->
       FTPClient = require 'ftp'
-      ftp = new FTPClient
+      shared.ftp = new FTPClient
       Journo.build()
       todo = compareManifest allPosts()
-      ftp.on 'ready', ->
+      shared.ftp.on 'ready', ->
         Journo.publishPost post for post in todo.puts
         Journo.unpublishPost post for post in todo.deletes
-      ftp.connect config.ftp
+      shared.ftp.connect shared.config.ftp
       writeManifest()
       yes
 
@@ -77,43 +84,30 @@ In order to `build` the blog, we render all of the posts out as HTML on disk.
     Journo.build = ->
       loadConfig()
       loadManifest()
+      compareManifest allPosts()
+      writeManifest()
       fs.mkdirSync('site') unless fs.existsSync('site')
       ncp 'public', 'site', (err) ->
         throw err if err
       for post in allPosts()
         markdown = fs.readFileSync postPath post
         html = Journo.render markdown
-        name = path.basename(post, '.md')
-        dir = "site/#{name}"
-        fs.mkdirSync dir unless fs.existsSync dir
-        fs.writeFileSync "#{dir}/index.html", html
+        file = htmlPath post
+        fs.mkdirSync path.dirname(file) unless fs.existsSync path.dirname(file)
+        fs.writeFileSync file, html
+      fs.writeFileSync "site/feed.xml", Journo.feed()
 
 The `config.json` configuration file is where you keep the nitty gritty details,
 like how to connect to your FTP server. The settings are: `host`, `port`,
 `secure`, `user`, and `password`.
 
     loadConfig = ->
-      return if config
+      return if shared.config
       try
-        config = JSON.parse fs.readFileSync 'config.json'
+        shared.config = JSON.parse fs.readFileSync 'config.json'
       catch err
         fatal "Unable to read config.json"
-      siteUrl = config.url.replace(/\/$/, '')
-
-For convenience, keep functions handy for finding the local file path to a post,
-and the URL for a post on the server.
-
-    postPath = (post) -> "posts/#{post}"
-
-    postUrl = (post) -> "#{siteUrl}/#{post}"
-
-    allPosts = -> fs.readdirSync 'posts'
-
-Quick helper for any fatal errors that might be encountered during a build.
-
-    fatal = (message) ->
-      console.error message
-      process.exit 1
+      shared.siteUrl = shared.config.url.replace(/\/$/, '')
 
 
 Publish Via FTP
@@ -125,7 +119,7 @@ To publish a post, we render it and FTP it up.
 
     Journo.FTP.publishPost = (post) ->
       fs.readFile postPath(post), (err, content) ->
-        ftp.put new Buffer(Journo.render(content)), post, (err) ->
+        shared.ftp.put new Buffer(Journo.render(content)), post, (err) ->
           throw err if err
 
 To unpublish a post, we delete it via FTP.
@@ -145,7 +139,7 @@ We'll use the `knox` library to connect to S3.
 
     Journo.S3.connect = ->
       loadConfig()
-      s3 or= knox.createClient config.s3
+      s3 or= knox.createClient shared.config.s3
 
 To publish a post, we render it and `PUT` it to S3.
 
@@ -153,7 +147,7 @@ To publish a post, we render it and `PUT` it to S3.
       client = Journo.S3.connect()
       throw 'content TK'
 
-      request = client.put path.join(config.s3.path, post),
+      request = client.put path.join(shared.config.s3.path, post),
         'Content-Length': content.length
         'Content-Type': 'text/html'
         'x-amz-acl': 'public-read'
@@ -173,16 +167,14 @@ and last recorded modified time) about each post.
 
     manifestPath = 'journo-manifest.json'
 
-    emptyManifest = posts: {}, published: null
-
     loadManifest = ->
-      manifest = if fs.existsSync manifestPath
+      shared.manifest = if fs.existsSync manifestPath
         JSON.parse fs.readFileSync manifestPath
       else
-        emptyManifest
+        {}
 
     writeManifest = ->
-      fs.writeFileSync manifestPath, JSON.stringify manifest
+      fs.writeFileSync manifestPath, JSON.stringify shared.manifest
 
 We update the manifest by looping through every post and every entry in the
 existing manifest, and looking for differences. Return a list of the posts
@@ -191,16 +183,17 @@ that need to be `PUT` to the server, and the posts that should be `DELETE`d.
     compareManifest = (posts) ->
       puts = []
       deletes = []
-      for file, meta of manifest when file not in posts
+      for file, meta of shared.manifest when file not in posts
         deletes.push file
+        delete shared.manifest[file]
       for file in posts
         stat = fs.statSync "posts/#{file}"
-        entry = manifest[file]
+        entry = shared.manifest[file]
         if not entry or entry.mtime isnt stat.mtime
           entry or= {pubtime: new Date}
           entry.mtime = stat.mtime
           puts.push file
-          manifest[file] = entry
+          shared.manifest[file] = entry
       {puts, deletes}
 
 
@@ -232,27 +225,29 @@ Publish a Feed
     Journo.feed = ->
       RSS = require 'rss'
       loadConfig()
+      config = shared.config
 
       feed = new RSS
         title: config.title
         description: config.description
-        feed_url: "#{siteUrl}/rss.xml"
-        site_url: siteUrl
+        feed_url: "#{shared.siteUrl}/rss.xml"
+        site_url: shared.siteUrl
         author: config.author
 
-      sorted = _.sortBy _.keys(manifest), (post) -> manifest[post].pubtime
+      sorted = _.sortBy _.keys(shared.manifest), (post) ->
+        shared.manifest[post].pubtime
 
       for post in sorted[0...20]
-        content = fs.readFileSync postPath post
+        content = fs.readFileSync(postPath post).toString()
         lexed = marked.lexer content
-        title = _.find lexed, (token) -> token.type is 'heading'
-        description = _.find lexed, (token) -> token.type is 'paragraph'
+        title = _.find(lexed, (token) -> token.type is 'heading')?.text
+        description = _.find(lexed, (token) -> token.type is 'paragraph')?.text
 
         feed.item
           title: title
           description: description
           url: postUrl post
-          date: manifest[post].pubtime
+          date: shared.manifest[post].pubtime
 
       feed.xml()
 
@@ -280,14 +275,14 @@ Preview via a Local Server
       url = require 'url'
       util = require 'util'
       server = http.createServer (req, res) ->
-        path = url.parse(req.url).pathname.replace /^\//, ''
-        publicPath = "public/#{path}"
+        rawPath = url.parse(req.url).pathname.replace(/^\//, '') or 'index'
+        publicPath = "public/" + rawPath
         fs.exists publicPath, (exists) ->
           if exists
             res.writeHead 200, 'Content-Type': mime.lookup(publicPath)
             fs.createReadStream(publicPath).pipe res
           else
-            post = "posts/#{path}.md"
+            post = "posts/#{rawPath}.md"
             fs.exists post, (exists) ->
               if exists
                 fs.readFile post, (err, content) ->
@@ -304,6 +299,15 @@ Preview via a Local Server
 Work Without JavaScript, But Default to a Fluid JavaScript-Enabled UI
 ---------------------------------------------------------------------
 
+The best way to handle this bit seems to be entirely on the client-side. For
+example, when rendering a JavaScript slideshow of photographs, instead of
+having the server spit out the slideshow code, simply have the blog detect
+the list of images during page load and move them into a slideshow right then
+and there -- using `alt` attributes for captions, for example.
+
+Since the blog is public, it's nice if search engines can see all of the pieces
+as well as readers.
+
 
 Finally, Putting it all Together. Run Journo From the Terminal
 --------------------------------------------------------------
@@ -315,6 +319,44 @@ Finally, Putting it all Together. Run Journo From the Terminal
         do Journo[command]
       else
         console.error "Journo doesn't know how to '#{command}'"
+
+
+Miscellaneous Bits and Utilities
+--------------------------------
+
+For convenience, keep functions handy for finding the local file path to a post,
+and the URL for a post on the server.
+
+    postPath = (post) -> "posts/#{post}"
+
+    htmlPath = (post) ->
+      if name = postName(post) is 'index'
+        'site/index.html'
+      else
+        "site/#{name}/index.html"
+
+    postName = (post) -> path.basename post, '.md'
+
+    postUrl = (post) -> "#{shared.siteUrl}/#{postName(post)}"
+
+    allPosts = -> fs.readdirSync('posts').filter (f) -> f.charAt(0) isnt '.'
+
+Convenience function for catching errors (keeping the preview server from
+crashing while testing code), and printing them out.
+
+    catchErrors = (func) ->
+      try
+        func()
+      catch err
+        console.error err.stack
+        "<pre>#{err.stack}</pre>"
+
+And then for errors that you want the app to die on -- things that would break
+the site build.
+
+    fatal = (message) ->
+      console.error message
+      process.exit 1
 
 
 
