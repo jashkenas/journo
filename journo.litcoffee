@@ -48,10 +48,9 @@ as `content`.
     Journo.render = (source) ->
       catchErrors ->
         shared.layout or= _.template(fs.readFileSync('layout.html').toString())
-        markdown  = _.template(source.toString())({fs})
-        lexed     = marked.lexer markdown
-        title     = _.find(lexed, (token) -> token.type is 'heading')?.text
-        content   = marked.parser lexed
+        markdown  = _.template(source.toString())({_, fs, path, folderContents, manifest: shared.manifest})
+        title     = postTitle markdown
+        content   = marked.parser marked.lexer markdown
         shared.layout {title, content}
 
 
@@ -71,7 +70,7 @@ version of the site is rendered into the `site` folder.
       FTPClient = require 'ftp'
       shared.ftp = new FTPClient
       Journo.build()
-      todo = compareManifest allPosts()
+      todo = compareManifest folderContents('posts')
       shared.ftp.on 'ready', ->
         Journo.publishPost post for post in todo.puts
         Journo.unpublishPost post for post in todo.deletes
@@ -84,12 +83,12 @@ In order to `build` the blog, we render all of the posts out as HTML on disk.
     Journo.build = ->
       loadConfig()
       loadManifest()
-      compareManifest allPosts()
+      compareManifest folderContents('posts')
       writeManifest()
       fs.mkdirSync('site') unless fs.existsSync('site')
       ncp 'public', 'site', (err) ->
         throw err if err
-      for post in allPosts()
+      for post in folderContents('posts')
         markdown = fs.readFileSync postPath post
         html = Journo.render markdown
         file = htmlPath post
@@ -192,6 +191,8 @@ that need to be `PUT` to the server, and the posts that should be `DELETE`d.
         if not entry or entry.mtime isnt stat.mtime
           entry or= {pubtime: new Date}
           entry.mtime = stat.mtime
+          content = fs.readFileSync("posts/#{file}").toString()
+          entry.title = postTitle content
           puts.push file
           shared.manifest[file] = entry
       {puts, deletes}
@@ -240,7 +241,7 @@ Publish a Feed
       for post in sorted[0...20]
         content = fs.readFileSync(postPath post).toString()
         lexed = marked.lexer content
-        title = _.find(lexed, (token) -> token.type is 'heading')?.text
+        title = postTitle content
         description = _.find(lexed, (token) -> token.type is 'paragraph')?.text
 
         feed.item
@@ -274,6 +275,7 @@ Preview via a Local Server
       mime = require 'mime'
       url = require 'url'
       util = require 'util'
+      loadManifest()
       server = http.createServer (req, res) ->
         rawPath = url.parse(req.url).pathname.replace(/^\//, '') or 'index'
         publicPath = "public/" + rawPath
@@ -339,7 +341,11 @@ and the URL for a post on the server.
 
     postUrl = (post) -> "#{shared.siteUrl}/#{postName(post)}"
 
-    allPosts = -> fs.readdirSync('posts').filter (f) -> f.charAt(0) isnt '.'
+    postTitle = (content) ->
+      _.find(marked.lexer(content), (token) -> token.type is 'heading')?.text
+
+    folderContents = (folder) ->
+      fs.readdirSync(folder).filter (f) -> f.charAt(0) isnt '.'
 
 Convenience function for catching errors (keeping the preview server from
 crashing while testing code), and printing them out.
