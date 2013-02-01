@@ -42,7 +42,7 @@
     FTPClient = require('ftp');
     shared.ftp = new FTPClient;
     Journo.build();
-    todo = compareManifest(folderContents('posts'));
+    todo = loadManifest();
     shared.ftp.on('ready', function() {
       var post, _i, _j, _len, _len1, _ref, _ref1, _results;
       _ref = todo.puts;
@@ -59,7 +59,6 @@
       return _results;
     });
     shared.ftp.connect(shared.config.ftp);
-    writeManifest();
     return true;
   };
 
@@ -67,8 +66,6 @@
     var file, html, markdown, post, _i, _len, _ref;
     loadConfig();
     loadManifest();
-    compareManifest(folderContents('posts'));
-    writeManifest();
     if (!fs.existsSync('site')) {
       fs.mkdirSync('site');
     }
@@ -88,7 +85,7 @@
       }
       fs.writeFileSync(file, html);
     }
-    return fs.writeFileSync("site/feed.xml", Journo.feed());
+    return fs.writeFileSync("site/feed.rss", Journo.feed());
   };
 
   loadConfig = function() {
@@ -150,15 +147,20 @@
   manifestPath = 'journo-manifest.json';
 
   loadManifest = function() {
-    return shared.manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath)) : {};
+    var todo;
+    shared.manifest = fs.existsSync(manifestPath) ? JSON.parse(fs.readFileSync(manifestPath)) : {};
+    todo = compareManifest();
+    writeManifest();
+    return todo;
   };
 
   writeManifest = function() {
     return fs.writeFileSync(manifestPath, JSON.stringify(shared.manifest));
   };
 
-  compareManifest = function(posts) {
-    var content, deletes, entry, file, meta, puts, stat, _i, _len, _ref;
+  compareManifest = function() {
+    var content, deletes, entry, file, meta, posts, puts, stat, _i, _len, _ref;
+    posts = folderContents('posts');
     puts = [];
     deletes = [];
     _ref = shared.manifest;
@@ -258,31 +260,38 @@
     server = http.createServer(function(req, res) {
       var publicPath, rawPath;
       rawPath = url.parse(req.url).pathname.replace(/^\//, '') || 'index';
-      publicPath = "public/" + rawPath;
-      return fs.exists(publicPath, function(exists) {
-        var post;
-        if (exists) {
-          res.writeHead(200, {
-            'Content-Type': mime.lookup(publicPath)
-          });
-          return fs.createReadStream(publicPath).pipe(res);
-        } else {
-          post = "posts/" + rawPath + ".md";
-          return fs.exists(post, function(exists) {
-            if (exists) {
-              return fs.readFile(post, function(err, content) {
-                res.writeHead(200, {
-                  'Content-Type': 'text/html'
+      if (rawPath === 'feed.rss') {
+        res.writeHead(200, {
+          'Content-Type': mime.lookup('.rss')
+        });
+        return res.end(Journo.feed());
+      } else {
+        publicPath = "public/" + rawPath;
+        return fs.exists(publicPath, function(exists) {
+          var post;
+          if (exists) {
+            res.writeHead(200, {
+              'Content-Type': mime.lookup(publicPath)
+            });
+            return fs.createReadStream(publicPath).pipe(res);
+          } else {
+            post = "posts/" + rawPath + ".md";
+            return fs.exists(post, function(exists) {
+              if (exists) {
+                return fs.readFile(post, function(err, content) {
+                  res.writeHead(200, {
+                    'Content-Type': 'text/html'
+                  });
+                  return res.end(Journo.render(content));
                 });
-                return res.end(Journo.render(content));
-              });
-            } else {
-              res.writeHead(404);
-              return res.end('404 Not Found');
-            }
-          });
-        }
-      });
+              } else {
+                res.writeHead(404);
+                return res.end('404 Not Found');
+              }
+            });
+          }
+        });
+      }
     });
     server.listen(1234);
     return console.log("Journo is previewing at http://localhost:1234");

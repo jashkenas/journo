@@ -70,12 +70,11 @@ version of the site is rendered into the `site` folder.
       FTPClient = require 'ftp'
       shared.ftp = new FTPClient
       Journo.build()
-      todo = compareManifest folderContents('posts')
+      todo = loadManifest()
       shared.ftp.on 'ready', ->
         Journo.publishPost post for post in todo.puts
         Journo.unpublishPost post for post in todo.deletes
       shared.ftp.connect shared.config.ftp
-      writeManifest()
       yes
 
 In order to `build` the blog, we render all of the posts out as HTML on disk.
@@ -83,8 +82,6 @@ In order to `build` the blog, we render all of the posts out as HTML on disk.
     Journo.build = ->
       loadConfig()
       loadManifest()
-      compareManifest folderContents('posts')
-      writeManifest()
       fs.mkdirSync('site') unless fs.existsSync('site')
       ncp 'public', 'site', (err) ->
         throw err if err
@@ -94,7 +91,7 @@ In order to `build` the blog, we render all of the posts out as HTML on disk.
         file = htmlPath post
         fs.mkdirSync path.dirname(file) unless fs.existsSync path.dirname(file)
         fs.writeFileSync file, html
-      fs.writeFileSync "site/feed.xml", Journo.feed()
+      fs.writeFileSync "site/feed.rss", Journo.feed()
 
 The `config.json` configuration file is where you keep the nitty gritty details,
 like how to connect to your FTP server. The settings are: `host`, `port`,
@@ -171,6 +168,9 @@ and last recorded modified time) about each post.
         JSON.parse fs.readFileSync manifestPath
       else
         {}
+      todo = compareManifest()
+      writeManifest()
+      todo
 
     writeManifest = ->
       fs.writeFileSync manifestPath, JSON.stringify shared.manifest
@@ -179,7 +179,8 @@ We update the manifest by looping through every post and every entry in the
 existing manifest, and looking for differences. Return a list of the posts
 that need to be `PUT` to the server, and the posts that should be `DELETE`d.
 
-    compareManifest = (posts) ->
+    compareManifest = ->
+      posts = folderContents 'posts'
       puts = []
       deletes = []
       for file, meta of shared.manifest when file not in posts
@@ -278,21 +279,25 @@ Preview via a Local Server
       loadManifest()
       server = http.createServer (req, res) ->
         rawPath = url.parse(req.url).pathname.replace(/^\//, '') or 'index'
-        publicPath = "public/" + rawPath
-        fs.exists publicPath, (exists) ->
-          if exists
-            res.writeHead 200, 'Content-Type': mime.lookup(publicPath)
-            fs.createReadStream(publicPath).pipe res
-          else
-            post = "posts/#{rawPath}.md"
-            fs.exists post, (exists) ->
-              if exists
-                fs.readFile post, (err, content) ->
-                  res.writeHead 200, 'Content-Type': 'text/html'
-                  res.end Journo.render content
-              else
-                res.writeHead 404
-                res.end '404 Not Found'
+        if rawPath is 'feed.rss'
+          res.writeHead 200, 'Content-Type': mime.lookup('.rss')
+          res.end Journo.feed()
+        else
+          publicPath = "public/" + rawPath
+          fs.exists publicPath, (exists) ->
+            if exists
+              res.writeHead 200, 'Content-Type': mime.lookup(publicPath)
+              fs.createReadStream(publicPath).pipe res
+            else
+              post = "posts/#{rawPath}.md"
+              fs.exists post, (exists) ->
+                if exists
+                  fs.readFile post, (err, content) ->
+                    res.writeHead 200, 'Content-Type': 'text/html'
+                    res.end Journo.render content
+                else
+                  res.writeHead 404
+                  res.end '404 Not Found'
 
       server.listen 1234
       console.log "Journo is previewing at http://localhost:1234"
