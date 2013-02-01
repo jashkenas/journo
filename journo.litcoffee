@@ -66,20 +66,7 @@ version of the site is rendered into the `site` folder.
 
     fs = require 'fs'
     path = require 'path'
-    {exec} = require 'child_process'
-
-    Journo.publish = ->
-      FTPClient = require 'ftp'
-      shared.ftp = new FTPClient
-      Journo.build()
-      todo = loadManifest()
-      shared.ftp.on 'ready', ->
-        Journo.publishPost post for post in todo.puts
-        Journo.unpublishPost post for post in todo.deletes
-      shared.ftp.connect shared.config.ftp
-      yes
-
-In order to `build` the blog, we render all of the posts out as HTML on disk.
+    {spawn, exec} = require 'child_process'
 
     Journo.build = ->
       loadConfig()
@@ -109,6 +96,13 @@ like how to connect to your FTP server. The settings are: `host`, `port`,
 
 Publish via rsync
 -----------------
+
+    Journo.publish = ->
+      Journo.build()
+      port = "ssh -p #{shared.config.publishPort or 22}"
+      rsync = spawn "rsync", ['-vurz', '--delete', '-e', port, 'site', shared.config.publish]
+      rsync.stdout.on 'data', (out) -> console.log out.toString()
+      rsync.stderr.on 'data', (err) -> console.error err.toString()
 
 
 Maintain a Manifest File
