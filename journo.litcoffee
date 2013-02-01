@@ -9,7 +9,7 @@ Journo is a blogging program, with a few basic goals. To wit:
 
 * Publish to flat files.
 
-* Publish via (S)FTP or S3.
+* Publish via Rsync.
 
 * Maintain a manifest file (what's published and what isn't, pub dates).
 
@@ -66,7 +66,7 @@ version of the site is rendered into the `site` folder.
 
     fs = require 'fs'
     path = require 'path'
-    {ncp} = require 'ncp'
+    {exec} = require 'child_process'
 
     Journo.publish = ->
       FTPClient = require 'ftp'
@@ -85,7 +85,7 @@ In order to `build` the blog, we render all of the posts out as HTML on disk.
       loadConfig()
       loadManifest()
       fs.mkdirSync('site') unless fs.existsSync('site')
-      ncp 'public', 'site', (err) ->
+      exec "rsync -vur --delete public site", (err, stdout, stderr) ->
         throw err if err
       for post in folderContents('posts')
         html = Journo.render post
@@ -107,53 +107,8 @@ like how to connect to your FTP server. The settings are: `host`, `port`,
       shared.siteUrl = shared.config.url.replace(/\/$/, '')
 
 
-Publish Via FTP
----------------
-
-    Journo.FTP = {}
-
-To publish a post, we render it and FTP it up.
-
-    Journo.FTP.publishPost = (post) ->
-      fs.readFile postPath(post), (err, content) ->
-        shared.ftp.put new Buffer(Journo.render(post, content)), post, (err) ->
-          throw err if err
-
-To unpublish a post, we delete it via FTP.
-
-    Journo.FTP.unpublishPost = (post) ->
-      throw 'TK'
-
-
-Publish Via S3
---------------
-
-We'll use the `knox` library to connect to S3.
-
-    Journo.S3 = {}
-    knox = require 'knox'
-    s3 = null
-
-    Journo.S3.connect = ->
-      loadConfig()
-      s3 or= knox.createClient shared.config.s3
-
-To publish a post, we render it and `PUT` it to S3.
-
-    Journo.S3.publishPost = (post) ->
-      client = Journo.S3.connect()
-      throw 'content TK'
-
-      request = client.put path.join(shared.config.s3.path, post),
-        'Content-Length': content.length
-        'Content-Type': 'text/html'
-        'x-amz-acl': 'public-read'
-
-      request.on 'response', (response) ->
-        if response.statusCode is 200
-          console.log "PUT #{post}"
-
-      request.end content
+Publish via rsync
+-----------------
 
 
 Maintain a Manifest File
@@ -261,10 +216,9 @@ Quickly Bootstrap a New Blog
       if fs.existsSync 'posts'
         return console.error "A blog already exists in #{here}"
       bootstrap = path.join(__dirname, 'bootstrap')
-      ncp bootstrap, '.', (err) ->
-        return console.error(err) if err
+      exec "rsync -vur --delete #{bootstrap} .", (err, stdout, stderr) ->
+        throw err if err
         console.log "Initialized new blog in #{here}"
-
 
 
 Preview via a Local Server
