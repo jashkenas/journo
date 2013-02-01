@@ -49,7 +49,7 @@ as `content`.
       catchErrors ->
         source or= fs.readFileSync postPath post
         shared.layout or= _.template(fs.readFileSync('layout.html').toString())
-        variables = {_, fs, path, folderContents, mapLink, postName, post: path.basename(post), posts: sortedPosts(), manifest: shared.manifest}
+        variables = renderVariables post
         markdown  = _.template(source.toString()) variables
         title     = postTitle markdown
         content   = marked.parser marked.lexer markdown
@@ -242,6 +242,7 @@ Publish a Feed
         lexed = marked.lexer content
         title = postTitle content
         description = _.find(lexed, (token) -> token.type is 'paragraph')?.text
+        description = marked.parser marked.lexer _.template(description)(renderVariables(post))
 
         feed.item
           title: title
@@ -355,6 +356,11 @@ and the URL for a post on the server.
     sortedPosts = ->
       _.sortBy _.without(_.keys(shared.manifest), 'index.md'), (post) ->
         shared.manifest[post].pubtime
+
+The shared variables we want to allow our templates to use in their evaluations.
+
+    renderVariables = (post) ->
+      {_, fs, path, folderContents, mapLink, postName, post: path.basename(post), posts: sortedPosts(), manifest: shared.manifest}
 
 Quick function to creating a link to a Google Map.
 
