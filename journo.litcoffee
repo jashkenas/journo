@@ -241,7 +241,7 @@ Publish a Feed
         content = fs.readFileSync(postPath post).toString()
         lexed = marked.lexer content
         title = postTitle content
-        description = _.find(lexed, (token) -> token.type is 'paragraph')?.text
+        description = _.find(lexed, (token) -> token.type is 'paragraph')?.text + ' ...'
         description = marked.parser marked.lexer _.template(description)(renderVariables(post))
 
         feed.item
@@ -345,7 +345,7 @@ and the URL for a post on the server.
 
     postName = (post) -> path.basename post, '.md'
 
-    postUrl = (post) -> "#{shared.siteUrl}/#{postName(post)}"
+    postUrl = (post) -> "#{shared.siteUrl}/#{postName(post)}/"
 
     postTitle = (content) ->
       _.find(marked.lexer(content), (token) -> token.type is 'heading')?.text

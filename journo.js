@@ -214,9 +214,9 @@
       content = fs.readFileSync(postPath(post)).toString();
       lexed = marked.lexer(content);
       title = postTitle(content);
-      description = (_ref1 = _.find(lexed, function(token) {
+      description = ((_ref1 = _.find(lexed, function(token) {
         return token.type === 'paragraph';
-      })) != null ? _ref1.text : void 0;
+      })) != null ? _ref1.text : void 0) + ' ...';
       description = marked.parser(marked.lexer(_.template(description)(renderVariables(post))));
       feed.item({
         title: title,
@@ -321,7 +321,7 @@
   };
 
   postUrl = function(post) {
-    return "" + shared.siteUrl + "/" + (postName(post));
+    return "" + shared.siteUrl + "/" + (postName(post)) + "/";
   };
 
   postTitle = function(content) {
