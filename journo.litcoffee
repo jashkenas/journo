@@ -45,13 +45,15 @@ take its raw **source**, treat it as both an Underscore template (for HTML
 generation) and as Markdown (for formatting), and insert it into the layout
 as `content`.
 
-    Journo.render = (source) ->
+    Journo.render = (post, source) ->
       catchErrors ->
+        source or= fs.readFileSync postPath post
         shared.layout or= _.template(fs.readFileSync('layout.html').toString())
-        markdown  = _.template(source.toString())({_, fs, path, folderContents, manifest: shared.manifest})
+        variables = {_, fs, path, folderContents, mapLink, postName, post: path.basename(post), posts: sortedPosts(), manifest: shared.manifest}
+        markdown  = _.template(source.toString()) variables
         title     = postTitle markdown
         content   = marked.parser marked.lexer markdown
-        shared.layout {title, content}
+        shared.layout _.extend variables, {title, content}
 
 
 Publish to Flat Files
@@ -86,8 +88,7 @@ In order to `build` the blog, we render all of the posts out as HTML on disk.
       ncp 'public', 'site', (err) ->
         throw err if err
       for post in folderContents('posts')
-        markdown = fs.readFileSync postPath post
-        html = Journo.render markdown
+        html = Journo.render post
         file = htmlPath post
         fs.mkdirSync path.dirname(file) unless fs.existsSync path.dirname(file)
         fs.writeFileSync file, html
@@ -115,7 +116,7 @@ To publish a post, we render it and FTP it up.
 
     Journo.FTP.publishPost = (post) ->
       fs.readFile postPath(post), (err, content) ->
-        shared.ftp.put new Buffer(Journo.render(content)), post, (err) ->
+        shared.ftp.put new Buffer(Journo.render(post, content)), post, (err) ->
           throw err if err
 
 To unpublish a post, we delete it via FTP.
@@ -236,10 +237,7 @@ Publish a Feed
         site_url: shared.siteUrl
         author: config.author
 
-      sorted = _.sortBy _.keys(shared.manifest), (post) ->
-        shared.manifest[post].pubtime
-
-      for post in sorted[0...20]
+      for post in sortedPosts()[0...20]
         content = fs.readFileSync(postPath post).toString()
         lexed = marked.lexer content
         title = postTitle content
@@ -276,6 +274,7 @@ Preview via a Local Server
       mime = require 'mime'
       url = require 'url'
       util = require 'util'
+      loadConfig()
       loadManifest()
       server = http.createServer (req, res) ->
         rawPath = url.parse(req.url).pathname.replace(/^\//, '') or 'index'
@@ -294,7 +293,7 @@ Preview via a Local Server
                 if exists
                   fs.readFile post, (err, content) ->
                     res.writeHead 200, 'Content-Type': 'text/html'
-                    res.end Journo.render content
+                    res.end Journo.render post, content
                 else
                   res.writeHead 404
                   res.end '404 Not Found'
@@ -337,7 +336,8 @@ and the URL for a post on the server.
     postPath = (post) -> "posts/#{post}"
 
     htmlPath = (post) ->
-      if name = postName(post) is 'index'
+      name = postName post
+      if name is 'index'
         'site/index.html'
       else
         "site/#{name}/index.html"
@@ -351,6 +351,16 @@ and the URL for a post on the server.
 
     folderContents = (folder) ->
       fs.readdirSync(folder).filter (f) -> f.charAt(0) isnt '.'
+
+    sortedPosts = ->
+      _.sortBy _.without(_.keys(shared.manifest), 'index.md'), (post) ->
+        shared.manifest[post].pubtime
+
+Quick function to creating a link to a Google Map.
+
+    mapLink = (place, additional = '', zoom = 15) ->
+      query = encodeURIComponent("#{place}, #{additional}")
+      "<a href=\"https://maps.google.com/maps?q=#{query}&t=h&z=#{zoom}\">#{place}</a>"
 
 Convenience function for catching errors (keeping the preview server from
 crashing while testing code), and printing them out.
