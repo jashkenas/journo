@@ -226,7 +226,7 @@ Preview via a Local Server
       loadConfig()
       loadManifest()
       server = http.createServer (req, res) ->
-        rawPath = url.parse(req.url).pathname.replace(/^\//, '') or 'index'
+        rawPath = url.parse(req.url).pathname.replace(/(^\/|\/$)/g, '') or 'index'
         if rawPath is 'feed.rss'
           res.writeHead 200, 'Content-Type': mime.lookup('.rss')
           res.end Journo.feed()

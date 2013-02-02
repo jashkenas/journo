@@ -197,7 +197,7 @@
     loadManifest();
     server = http.createServer(function(req, res) {
       var publicPath, rawPath;
-      rawPath = url.parse(req.url).pathname.replace(/^\//, '') || 'index';
+      rawPath = url.parse(req.url).pathname.replace(/(^\/|\/$)/g, '') || 'index';
       if (rawPath === 'feed.rss') {
         res.writeHead(200, {
           'Content-Type': mime.lookup('.rss')
