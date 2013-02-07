@@ -15,9 +15,7 @@ Journo is a blogging program, with a few basic goals. To wit:
 
 * Retina ready.
 
-* Syntax highlight code and handle large photo slideshows.
-
-* Handle minimal metadata (photos have captions, posts have titles).
+* Syntax highlight code.
 
 * Publish a feed.
 
@@ -33,27 +31,34 @@ Journo is a blogging program, with a few basic goals. To wit:
 Write in Markdown
 -----------------
 
-We'll use the excellent `marked` module to compile Markdown into HTML, and
-Underscore for many of its goodies later on.
+We'll use the excellent **marked** module to compile Markdown into HTML, and
+Underscore for many of its goodies later on. Up top, create a namespace for
+shared values needed by more than one function.
 
     marked = require 'marked'
     _ = require 'underscore'
     shared = {}
 
-A Journo site has a layout file, stored in `layout.html`. To render a post, we
-take its raw **source**, treat it as both an Underscore template (for HTML
-generation) and as Markdown (for formatting), and insert it into the layout
-as `content`.
+To render a post, we take its raw `source`, treat it as both an Underscore
+template (for HTML generation) and as Markdown (for formatting), and insert it
+into the layout as `content`.
 
     Journo.render = (post, source) ->
       catchErrors ->
+        do loadLayout
         source or= fs.readFileSync postPath post
-        shared.layout or= _.template(fs.readFileSync('layout.html').toString())
         variables = renderVariables post
         markdown  = _.template(source.toString()) variables
-        title     = postTitle markdown
+        title     = detectTitle markdown
         content   = marked.parser marked.lexer markdown
         shared.layout _.extend variables, {title, content}
+
+A Journo site has a layout file, stored in `layout.html`, which is used
+to wrap every page.
+
+    loadLayout = (force) ->
+      return layout if not force and layout = shared.layout
+      shared.layout = _.template(fs.readFileSync('layout.html').toString())
 
 
 Publish to Flat Files
@@ -61,29 +66,35 @@ Publish to Flat Files
 
 A blog is a folder on your hard drive. Within the blog, you have a `posts`
 folder for blog posts, a `public` folder for static content, a `layout.html`
-file, and a `journo.json` file for configuration. During a `build`, a static
-version of the site is rendered into the `site` folder.
+file for the layout which wraps every page, and a `journo.json` file for
+configuration. During a `build`, a static version of the site is rendered
+into the `site` folder, by **rsync**ing over all static files, rendering and
+writing every post, and creating an RSS feed.
 
     fs = require 'fs'
     path = require 'path'
     {spawn, exec} = require 'child_process'
 
     Journo.build = ->
-      loadConfig()
-      loadManifest()
+      do loadManifest
       fs.mkdirSync('site') unless fs.existsSync('site')
-      exec "rsync -vur --delete public site", (err, stdout, stderr) ->
+
+      exec "rsync -vur --delete public/ site", (err, stdout, stderr) ->
         throw err if err
+
       for post in folderContents('posts')
         html = Journo.render post
         file = htmlPath post
         fs.mkdirSync path.dirname(file) unless fs.existsSync path.dirname(file)
         fs.writeFileSync file, html
+
       fs.writeFileSync "site/feed.rss", Journo.feed()
 
-The `config.json` configuration file is where you keep the nitty gritty details,
-like how to connect to your FTP server. The settings are: `host`, `port`,
-`secure`, `user`, and `password`.
+The `config.json` configuration file is where you keep the configuration
+details of your blog, and how to connect to the server you'd like to publish
+it on. The valid settings are: `title`, `description`, `author` (for RSS), `url
+`, `publish` (the `user@host:path` location to **rsync** to), and `publishPort`
+(if your server doesn't listen to SSH on the usual one).
 
     loadConfig = ->
       return if shared.config
@@ -97,10 +108,13 @@ like how to connect to your FTP server. The settings are: `host`, `port`,
 Publish via rsync
 -----------------
 
+Publishing is nice and rudimentary. We build out an entirely static version of
+the site and **rysnc** it up to the server.
+
     Journo.publish = ->
-      Journo.build()
+      do Journo.build
       port = "ssh -p #{shared.config.publishPort or 22}"
-      rsync = spawn "rsync", ['-vurz', '--delete', '-e', port, 'site', shared.config.publish]
+      rsync = spawn "rsync", ['-vurz', '--delete', '-e', port, 'site/', shared.config.publish]
       rsync.stdout.on 'data', (out) -> console.log out.toString()
       rsync.stderr.on 'data', (err) -> console.error err.toString()
 
@@ -114,47 +128,54 @@ and last recorded modified time) about each post.
     manifestPath = 'journo-manifest.json'
 
     loadManifest = ->
+      do loadConfig
+
       shared.manifest = if fs.existsSync manifestPath
         JSON.parse fs.readFileSync manifestPath
       else
         {}
-      todo = compareManifest()
-      writeManifest()
-      todo
 
-    writeManifest = ->
+      do updateManifest
       fs.writeFileSync manifestPath, JSON.stringify shared.manifest
 
 We update the manifest by looping through every post and every entry in the
-existing manifest, and looking for differences. Return a list of the posts
-that need to be `PUT` to the server, and the posts that should be `DELETE`d.
+existing manifest, looking for differences in `mtime`, and recording those
+along with the title and description of each post.
 
-    compareManifest = ->
+    updateManifest = ->
+      manifest = shared.manifest
       posts = folderContents 'posts'
-      puts = []
-      deletes = []
-      for file, meta of shared.manifest when file not in posts
-        deletes.push file
-        delete shared.manifest[file]
-      for file in posts
-        stat = fs.statSync "posts/#{file}"
-        entry = shared.manifest[file]
+
+      delete manifest[post] for post of manifest when post not in posts
+
+      for post in posts
+        stat = fs.statSync postPath post
+        entry = manifest[post]
         if not entry or entry.mtime isnt stat.mtime
-          entry or= {pubtime: new Date}
+          entry or= {pubtime: stat.ctime}
           entry.mtime = stat.mtime
-          content = fs.readFileSync("posts/#{file}").toString()
-          entry.title = postTitle content
-          puts.push file
-          shared.manifest[file] = entry
-      {puts, deletes}
+          content = fs.readFileSync(postPath post).toString()
+          entry.title = detectTitle content
+          entry.description = detectDescription content, post
+          manifest[post] = entry
+
+      yes
 
 
 Retina Ready
 ------------
 
+In the future, it may make sense for Journo to have some sort of built-in
+facility for automatically downsizing photos from retina to regular sizes ...
+But for now, this bit is up to you.
+
 
 Syntax Highlight Code
 ---------------------
+
+We syntax-highlight blocks of code with the nifty **highlight** package that
+includes heuristics for auto-language detection, so you don't have to specify
+what you're coding in.
 
     {Highlight} = require 'highlight'
 
@@ -163,20 +184,18 @@ Syntax Highlight Code
         Highlight code
 
 
-Create Photo Slideshows
------------------------
-
-
-Handle Minimal Metadata
------------------------
-
-
 Publish a Feed
 --------------
 
+We'll use the **rss** module to build a simple feed of recent posts. Start with
+the basic `author`, blog `title`, `description` and `url` configured in the
+`config.json`. Then, each post's `title` is the first header present in the
+post, the `description` is the first paragraph, and the date is the date you
+first created the post file.
+
     Journo.feed = ->
       RSS = require 'rss'
-      loadConfig()
+      do loadConfig
       config = shared.config
 
       feed = new RSS
@@ -187,17 +206,12 @@ Publish a Feed
         author: config.author
 
       for post in sortedPosts()[0...20]
-        content = fs.readFileSync(postPath post).toString()
-        lexed = marked.lexer content
-        title = postTitle content
-        description = _.find(lexed, (token) -> token.type is 'paragraph')?.text + ' ...'
-        description = marked.parser marked.lexer _.template(description)(renderVariables(post))
-
+        entry = shared.manifest[post]
         feed.item
-          title: title
-          description: description
+          title: entry.title
+          description: entry.description
           url: postUrl post
-          date: shared.manifest[post].pubtime
+          date: entry.pubtime
 
       feed.xml()
 
@@ -205,10 +219,13 @@ Publish a Feed
 Quickly Bootstrap a New Blog
 ----------------------------
 
+We **init** a new blog into the current directory by copying over the contents
+of a basic `bootstrap` folder.
+
     Journo.init = ->
       here = fs.realpathSync '.'
       if fs.existsSync 'posts'
-        return console.error "A blog already exists in #{here}"
+        fatal "A blog already exists in #{here}"
       bootstrap = path.join(__dirname, 'bootstrap')
       exec "rsync -vur --delete #{bootstrap} .", (err, stdout, stderr) ->
         throw err if err
@@ -218,37 +235,56 @@ Quickly Bootstrap a New Blog
 Preview via a Local Server
 --------------------------
 
+Instead of constantly rebuilding a purely static version of the site, Journo
+provides a preview server (which you can start by just typing `journo` from
+within your blog).
+
     Journo.preview = ->
       http = require 'http'
       mime = require 'mime'
       url = require 'url'
       util = require 'util'
-      loadConfig()
-      loadManifest()
+      do loadManifest
+
       server = http.createServer (req, res) ->
         rawPath = url.parse(req.url).pathname.replace(/(^\/|\/$)/g, '') or 'index'
+
+If the request is for a preview of the RSS feed...
+
         if rawPath is 'feed.rss'
           res.writeHead 200, 'Content-Type': mime.lookup('.rss')
           res.end Journo.feed()
+
+If the request is for a static file that exists in our `public` directory...
+
         else
           publicPath = "public/" + rawPath
           fs.exists publicPath, (exists) ->
             if exists
               res.writeHead 200, 'Content-Type': mime.lookup(publicPath)
               fs.createReadStream(publicPath).pipe res
+
+If the request is for the slug of a valid post, we reload the layout, and
+render it...
+
             else
               post = "posts/#{rawPath}.md"
               fs.exists post, (exists) ->
                 if exists
+                  loadLayout true
                   fs.readFile post, (err, content) ->
                     res.writeHead 200, 'Content-Type': 'text/html'
                     res.end Journo.render post, content
+
+Anything else is a 404.
+
                 else
                   res.writeHead 404
                   res.end '404 Not Found'
 
       server.listen 1234
       console.log "Journo is previewing at http://localhost:1234"
+      exec "open http://localhost:1234"
 
 
 Work Without JavaScript, But Default to a Fluid JavaScript-Enabled UI
@@ -267,22 +303,26 @@ as well as readers.
 Finally, Putting it all Together. Run Journo From the Terminal
 --------------------------------------------------------------
 
+We'll do the simplest possible command-line interface. If a public function
+exists on the `Journo` object, you can run it. *Note that this lets you do
+silly things, like* `journo toString` *but no big deal.*
+
     Journo.run = ->
-      args = process.argv.slice 2
-      command = args[0] or 'preview'
-      if Journo[command]
-        do Journo[command]
-      else
-        console.error "Journo doesn't know how to '#{command}'"
+      command = process.argv[2] or 'preview'
+      return do Journo[command] if Journo[command]
+      console.error "Journo doesn't know how to '#{command}'"
 
 
 Miscellaneous Bits and Utilities
 --------------------------------
 
-For convenience, keep functions handy for finding the local file path to a post,
-and the URL for a post on the server.
+Little utility functions that are useful up above.
+
+The file path to the source of a given `post`.
 
     postPath = (post) -> "posts/#{post}"
+
+The server-side path to the HTML for a given `post`.
 
     htmlPath = (post) ->
       name = postName post
@@ -291,26 +331,57 @@ and the URL for a post on the server.
       else
         "site/#{name}/index.html"
 
+The name (or slug) of a post, taken from the filename.
+
     postName = (post) -> path.basename post, '.md'
+
+The full, absolute URL for a published post.
 
     postUrl = (post) -> "#{shared.siteUrl}/#{postName(post)}/"
 
-    postTitle = (content) ->
+Starting with the string contents of a post, detect the title --
+the first heading.
+
+    detectTitle = (content) ->
       _.find(marked.lexer(content), (token) -> token.type is 'heading')?.text
+
+Starting with the string contents of a post, detect the description --
+the first paragraph.
+
+    detectDescription = (content, post) ->
+      desc = _.find(marked.lexer(content), (token) -> token.type is 'paragraph')?.text
+      marked.parser marked.lexer _.template("#{desc}...")(renderVariables(post))
+
+Helper function to read in the contents of a folder, ignoring hidden files
+and directories.
 
     folderContents = (folder) ->
       fs.readdirSync(folder).filter (f) -> f.charAt(0) isnt '.'
+
+Return the list of posts currently in the manifest, sorted by their date of
+publication.
 
     sortedPosts = ->
       _.sortBy _.without(_.keys(shared.manifest), 'index.md'), (post) ->
         shared.manifest[post].pubtime
 
-The shared variables we want to allow our templates to use in their evaluations.
+The shared variables we want to allow our templates (both posts, and layout)
+to use in their evaluations.
 
     renderVariables = (post) ->
-      {_, fs, path, folderContents, mapLink, postName, post: path.basename(post), posts: sortedPosts(), manifest: shared.manifest}
+      {
+        _
+        fs
+        path
+        mapLink
+        postName
+        folderContents
+        posts: sortedPosts()
+        post: path.basename(post)
+        manifest: shared.manifest
+      }
 
-Quick function to creating a link to a Google Map.
+Quick function which creates a link to a Google Map of the place.
 
     mapLink = (place, additional = '', zoom = 15) ->
       query = encodeURIComponent("#{place}, #{additional}")
@@ -320,13 +391,12 @@ Convenience function for catching errors (keeping the preview server from
 crashing while testing code), and printing them out.
 
     catchErrors = (func) ->
-      try
-        func()
+      try do func
       catch err
         console.error err.stack
         "<pre>#{err.stack}</pre>"
 
-And then for errors that you want the app to die on -- things that would break
+Finally, for errors that you want the app to die on -- things that should break
 the site build.
 
     fatal = (message) ->
