@@ -82,13 +82,13 @@ writing every post, and creating an RSS feed.
       exec "rsync -vur --delete public/ site", (err, stdout, stderr) ->
         throw err if err
 
-      for post in folderContents('posts')
-        html = Journo.render post
-        file = htmlPath post
-        fs.mkdirSync path.dirname(file) unless fs.existsSync path.dirname(file)
-        fs.writeFileSync file, html
+        for post in folderContents('posts')
+          html = Journo.render post
+          file = htmlPath post
+          fs.mkdirSync path.dirname(file) unless fs.existsSync path.dirname(file)
+          fs.writeFileSync file, html
 
-      fs.writeFileSync "site/feed.rss", Journo.feed()
+        fs.writeFileSync "site/feed.rss", Journo.feed()
 
 The `config.json` configuration file is where you keep the configuration
 details of your blog, and how to connect to the server you'd like to publish
@@ -113,10 +113,20 @@ the site and **rysnc** it up to the server.
 
     Journo.publish = ->
       do Journo.build
+      rsync 'site/public/', path.join(shared.config.publish, 'public'), ->
+        rsync 'site/', shared.config.publish
+
+A helper function for **rsync**ing, with logging, and the ability to wait for
+the rsync to continue before proceeding. This is useful for ensuring that our
+new images are finished uploading (very slowly) before the update to the feed
+is syndicated out.
+
+    rsync = (from, to, callback) ->
       port = "ssh -p #{shared.config.publishPort or 22}"
-      rsync = spawn "rsync", ['-vurz', '--delete', '-e', port, 'site/', shared.config.publish]
-      rsync.stdout.on 'data', (out) -> console.log out.toString()
-      rsync.stderr.on 'data', (err) -> console.error err.toString()
+      child = spawn "rsync", ['-vurz', '--delete', '-e', port, from, to]
+      child.stdout.on 'data', (out) -> console.log out.toString()
+      child.stderr.on 'data', (err) -> console.error err.toString()
+      child.on 'exit', callback if callback
 
 
 Maintain a Manifest File
