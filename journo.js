@@ -79,7 +79,7 @@
 
   Journo.publish = function() {
     Journo.build();
-    return rsync('site/public/', path.join(shared.config.publish, 'public'), function() {
+    return rsync('site/images/', path.join(shared.config.publish, 'images/'), function() {
       return rsync('site/', shared.config.publish);
     });
   };

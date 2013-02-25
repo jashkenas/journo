@@ -113,7 +113,7 @@ the site and **rysnc** it up to the server.
 
     Journo.publish = ->
       do Journo.build
-      rsync 'site/public/', path.join(shared.config.publish, 'public'), ->
+      rsync 'site/images/', path.join(shared.config.publish, 'images/'), ->
         rsync 'site/', shared.config.publish
 
 A helper function for **rsync**ing, with logging, and the ability to wait for
