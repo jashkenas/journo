@@ -96,6 +96,9 @@ it on. The valid settings are: `title`, `description`, `author` (for RSS), `url
 `, `publish` (the `user@host:path` location to **rsync** to), and `publishPort`
 (if your server doesn't listen to SSH on the usual one).
 
+An example `config.json` will be bootstrapped for you when you initialize a blog,
+so you don't need to remember any of that.
+
     loadConfig = ->
       return if shared.config
       try
@@ -118,7 +121,7 @@ the site and **rysnc** it up to the server.
 
 A helper function for **rsync**ing, with logging, and the ability to wait for
 the rsync to continue before proceeding. This is useful for ensuring that our
-new images are finished uploading (very slowly) before the update to the feed
+any new photos have finished uploading (very slowly) before the update to the feed
 is syndicated out.
 
     rsync = (from, to, callback) ->
@@ -132,8 +135,10 @@ is syndicated out.
 Maintain a Manifest File
 ------------------------
 
-The "manifest" is where Journo keeps track of metadata (the publication date
-and last recorded modified time) about each post.
+The "manifest" is where Journo keeps track of metadata -- the title, description,
+publications date and last modified time of each post. Everything you need to
+render out an RSS feed ... and everything you need to know if a post has been
+updated or removed.
 
     manifestPath = 'journo-manifest.json'
 
@@ -286,7 +291,8 @@ render it...
                     res.writeHead 200, 'Content-Type': 'text/html'
                     res.end Journo.render post, content
 
-Anything else is a 404.
+Anything else is a 404. (Does anyone know a cross-platform equivalent of the
+OSX `open` command?)
 
                 else
                   res.writeHead 404
@@ -321,6 +327,25 @@ silly things, like* `journo toString` *but no big deal.*
       command = process.argv[2] or 'preview'
       return do Journo[command] if Journo[command]
       console.error "Journo doesn't know how to '#{command}'"
+
+Let's also provide a help page that lists the available commands.
+
+    Journo.help = Journo['--help'] = ->
+      console.log """
+        Usage: journo [command]
+
+        If called without a command, `journo` will preview your blog.
+
+        init      start a new blog in the current folder
+        build     build a static version of the blog into 'site'
+        preview   live preview the blog via a local server
+        publish   publish the blog to your remote server
+      """
+
+And we might as well do the version number, for completeness' sake.
+
+    Journo.version = Journo['--version'] = ->
+      console.log "Journo 0.0.1"
 
 
 Miscellaneous Bits and Utilities
@@ -376,7 +401,9 @@ publication.
         shared.manifest[post].pubtime
 
 The shared variables we want to allow our templates (both posts, and layout)
-to use in their evaluations.
+to use in their evaluations. In the future, it would be nice to determine
+exactly what best belongs here, and provide an easier way for the blog author
+to add functions to it.
 
     renderVariables = (post) ->
       {
@@ -391,7 +418,8 @@ to use in their evaluations.
         manifest: shared.manifest
       }
 
-Quick function which creates a link to a Google Map of the place.
+Quick function which creates a link to a Google Map search for the name of the
+place.
 
     mapLink = (place, additional = '', zoom = 15) ->
       query = encodeURIComponent("#{place}, #{additional}")
