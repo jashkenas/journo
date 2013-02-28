@@ -10,7 +10,8 @@ task "build", "watch and build the Journo source", ->
 # manually futz the README ourselves.
 task "readme", "rebuild the readme file", ->
   source = fs.readFileSync('journo.litcoffee').toString()
-  source = source.replace /\n\n    ([\s\S]*?)\n\n(?!    )/mg, '\n```coffeescript\n    $1\n```\n'
+  source = source.replace /\n\n    ([\s\S]*?)\n\n(?!    )/mg, (match, code) ->
+    "\n```coffeescript\n#{code.replace(/^    /mg, '')}\n```\n"
   fs.writeFileSync 'README.md', source
 
 
