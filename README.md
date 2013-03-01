@@ -25,7 +25,9 @@ Journo is a blogging program, with a few basic goals. To wit:
 
 * Work without JavaScript, but default to a fluid JavaScript-enabled UI.
 
-... let's go through these one at a time:
+You can install and use the `journo` command via npm: `sudo npm install -g journo`
+
+... now, let's go through those features one at a time:
 
 
 Write in Markdown
