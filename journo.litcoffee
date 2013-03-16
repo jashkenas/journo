@@ -194,12 +194,14 @@ We syntax-highlight blocks of code with the nifty **highlight** package that
 includes heuristics for auto-language detection, so you don't have to specify
 what you're coding in.
 
-    {Highlight} = require 'highlight'
+    highlight = require 'highlight.js'
 
     marked.setOptions
       highlight: (code, lang) ->
-        Highlight code
-
+        if highlight.LANGUAGES[lang]?
+          highlight.highlight(lang, code, true).value
+        else
+          highlight.highlightAuto(code).value
 
 Publish a Feed
 --------------
