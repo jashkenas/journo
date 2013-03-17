@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title><%= title || "Journo" %></title>
+  </head>
+
+  <body>
+
+    <div class="content">
+
+      <%= content %>
+
+      <% if (post != 'index.md') { %>
+        <div class="nav">
+          <% var idx = posts.indexOf(post); %>
+          <% if (idx > 0) { %>
+            <a class="prev" href="/<%= postName(posts[idx - 1]) %>/"><span class="arrow">&larr;</span> Prev</a>
+          <% } %>
+          <% if (idx < posts.length - 1) { %>
+            <a class="next" href="/<%= postName(posts[idx + 1]) %>/">Next <span class="arrow">&rarr;</span></a>
+          <% } %>
+        </div>
+      <% } %>
+
+    </div>
+
+  </body>
+</html>

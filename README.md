@@ -30,6 +30,18 @@ You can install and use the `journo` command via npm: `sudo npm install -g journ
 ... now, let's go through those features one at a time:
 
 
+Getting Started
+---------------
+
+1. Create a folder for your blog, and `cd` into it.
+
+2. Type `journo init` to bootstrap a new empty blog.
+
+3. Edit the `config.json`, `layout.html`, and `posts/index.md` files to suit.
+
+4. Type `journo` to start the preview server, and have at it.
+
+
 Write in Markdown
 -----------------
 

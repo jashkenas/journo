@@ -1,10 +1,13 @@
-{spawn} = require 'child_process'
+{spawn, exec} = require 'child_process'
 fs = require 'fs'
 
 task "build", "watch and build the Journo source", ->
   compiler = spawn 'coffee', ['-cw', '.']
   compiler.stdout.on 'data', (data) -> console.log data.toString().trim()
   compiler.stderr.on 'data', (data) -> console.error data.toString().trim()
+
+task "doc", "generate documentation", ->
+  exec "docco -l linear journo.litcoffee"
 
 # Until GitHub has proper Literate CoffeeScript highlighting support, let's
 # manually futz the README ourselves.

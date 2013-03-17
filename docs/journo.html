@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <title>Journo</title>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <link rel="stylesheet" media="all" href="public/stylesheets/normalize.css" />
+  <link rel="stylesheet" media="all" href="docco.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="page">
+
+      <div class="header">
+        
+          
+          <h1>Journo</h1>
+
+          
+        
+
+        
+      </div>
+
+      
+        
+        
+        
+          <div class='highlight'><pre>Journo = module.exports = {}</pre></div>
+        
+      
+        
+        <p>Journo is a blogging program, with a few basic goals. To wit:
+
+</p>
+<ul>
+<li><p>Write in Markdown.</p>
+</li>
+<li><p>Publish to flat files.</p>
+</li>
+<li><p>Publish via Rsync.</p>
+</li>
+<li><p>Maintain a manifest file (what&#39;s published and what isn&#39;t, pub dates).</p>
+</li>
+<li><p>Retina ready.</p>
+</li>
+<li><p>Syntax highlight code.</p>
+</li>
+<li><p>Publish a feed.</p>
+</li>
+<li><p>Quickly bootstrap a new blog.</p>
+</li>
+<li><p>Preview via a local server.</p>
+</li>
+<li><p>Work without JavaScript, but default to a fluid JavaScript-enabled UI.</p>
+</li>
+</ul>
+<p>You can install and use the <code>journo</code> command via npm: <code>sudo npm install -g journo</code>
+
+</p>
+<p>... now, let&#39;s go through those features one at a time:
+
+
+</p>
+<h2>Getting Started</h2>
+
+        
+      
+        
+        <ol>
+<li><p>Create a folder for your blog, and <code>cd</code> into it.</p>
+</li>
+<li><p>Type <code>journo init</code> to bootstrap a new empty blog.</p>
+</li>
+<li><p>Edit the <code>config.json</code>, <code>layout.html</code>, and <code>posts/index.md</code> files to suit.</p>
+</li>
+<li><p>Type <code>journo</code> to start the preview server, and have at it.</p>
+</li>
+</ol>
+<h2>Write in Markdown</h2>
+
+        
+      
+        
+        <p>We&#39;ll use the excellent <strong>marked</strong> module to compile Markdown into HTML, and
+Underscore for many of its goodies later on. Up top, create a namespace for
+shared values needed by more than one function.
+
+</p>
+
+        
+          <div class='highlight'><pre>marked = require <span class="string">'marked'</span>
+_ = require <span class="string">'underscore'</span>
+shared = {}</pre></div>
+        
+      
+        
+        <p>To render a post, we take its raw <code>source</code>, treat it as both an Underscore
+template (for HTML generation) and as Markdown (for formatting), and insert it
+into the layout as <code>content</code>.
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.<span class="function"><span class="title">render</span></span> = (post, source) -&gt;
+  catchErrors -&gt;
+    <span class="keyword">do</span> loadLayout
+    source <span class="keyword">or</span>= fs.readFileSync postPath post
+    variables = renderVariables post
+    markdown  = _.template(source.toString()) variables
+    title     = detectTitle markdown
+    content   = marked.parser marked.lexer markdown
+    shared.layout _.extend variables, {title, content}</pre></div>
+        
+      
+        
+        <p>A Journo site has a layout file, stored in <code>layout.html</code>, which is used
+to wrap every page.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">loadLayout</span></span> = (force) -&gt;
+  <span class="keyword">return</span> layout <span class="keyword">if</span> <span class="keyword">not</span> force <span class="keyword">and</span> layout = shared.layout
+  shared.layout = _.template(fs.readFileSync(<span class="string">'layout.html'</span>).toString())</pre></div>
+        
+      
+        
+        <h2>Publish to Flat Files</h2>
+
+        
+      
+        
+        <p>A blog is a folder on your hard drive. Within the blog, you have a <code>posts</code>
+folder for blog posts, a <code>public</code> folder for static content, a <code>layout.html</code>
+file for the layout which wraps every page, and a <code>journo.json</code> file for
+configuration. During a <code>build</code>, a static version of the site is rendered
+into the <code>site</code> folder, by <strong>rsync</strong>ing over all static files, rendering and
+writing every post, and creating an RSS feed.
+
+</p>
+
+        
+          <div class='highlight'><pre>fs = require <span class="string">'fs'</span>
+path = require <span class="string">'path'</span>
+{spawn, exec} = require <span class="string">'child_process'</span>
+
+Journo.<span class="function"><span class="title">build</span></span> = -&gt;
+  <span class="keyword">do</span> loadManifest
+  fs.mkdirSync(<span class="string">'site'</span>) <span class="keyword">unless</span> fs.existsSync(<span class="string">'site'</span>)
+
+  exec <span class="string">"rsync -vur --delete public/ site"</span>, (err, stdout, stderr) -&gt;
+    <span class="keyword">throw</span> err <span class="keyword">if</span> err
+
+    <span class="keyword">for</span> post <span class="keyword">in</span> folderContents(<span class="string">'posts'</span>)
+      html = Journo.render post
+      file = htmlPath post
+      fs.mkdirSync path.dirname(file) <span class="keyword">unless</span> fs.existsSync path.dirname(file)
+      fs.writeFileSync file, html
+
+    fs.writeFileSync <span class="string">"site/feed.rss"</span>, Journo.feed()</pre></div>
+        
+      
+        
+        <p>The <code>config.json</code> configuration file is where you keep the configuration
+details of your blog, and how to connect to the server you&#39;d like to publish
+it on. The valid settings are: <code>title</code>, <code>description</code>, <code>author</code> (for RSS), <code>url
+</code>, <code>publish</code> (the <code>user@host:path</code> location to <strong>rsync</strong> to), and <code>publishPort</code>
+(if your server doesn&#39;t listen to SSH on the usual one).
+
+</p>
+<p>An example <code>config.json</code> will be bootstrapped for you when you initialize a blog,
+so you don&#39;t need to remember any of that.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">loadConfig</span></span> = -&gt;
+  <span class="keyword">return</span> <span class="keyword">if</span> shared.config
+  <span class="keyword">try</span>
+    shared.config = JSON.parse fs.readFileSync <span class="string">'config.json'</span>
+  <span class="keyword">catch</span> err
+    fatal <span class="string">"Unable to read config.json"</span>
+  shared.siteUrl = shared.config.url.replace(<span class="regexp">/\/$/</span>, <span class="string">''</span>)</pre></div>
+        
+      
+        
+        <h2>Publish via rsync</h2>
+
+        
+      
+        
+        <p>Publishing is nice and rudimentary. We build out an entirely static version of
+the site and <strong>rysnc</strong> it up to the server.
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.<span class="function"><span class="title">publish</span></span> = -&gt;
+  <span class="keyword">do</span> Journo.build
+  rsync <span class="string">'site/images/'</span>, path.join(shared.config.publish, <span class="string">'images/'</span>), -&gt;
+    rsync <span class="string">'site/'</span>, shared.config.publish</pre></div>
+        
+      
+        
+        <p>A helper function for <strong>rsync</strong>ing, with logging, and the ability to wait for
+the rsync to continue before proceeding. This is useful for ensuring that our
+any new photos have finished uploading (very slowly) before the update to the feed
+is syndicated out.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">rsync</span></span> = (from, to, callback) -&gt;
+  port = <span class="string">"ssh -p <span class="subst">#{shared.config.publishPort <span class="keyword">or</span> <span class="number">22</span>}</span>"</span>
+  child = spawn <span class="string">"rsync"</span>, [<span class="string">'-vurz'</span>, <span class="string">'--delete'</span>, <span class="string">'-e'</span>, port, from, to]
+  child.stdout.<span class="literal">on</span> <span class="string">'data'</span>, (out) -&gt; console.log out.toString()
+  child.stderr.<span class="literal">on</span> <span class="string">'data'</span>, (err) -&gt; console.error err.toString()
+  child.<span class="literal">on</span> <span class="string">'exit'</span>, callback <span class="keyword">if</span> callback</pre></div>
+        
+      
+        
+        <h2>Maintain a Manifest File</h2>
+
+        
+      
+        
+        <p>The &quot;manifest&quot; is where Journo keeps track of metadata -- the title, description,
+publications date and last modified time of each post. Everything you need to
+render out an RSS feed ... and everything you need to know if a post has been
+updated or removed.
+
+</p>
+
+        
+          <div class='highlight'><pre>manifestPath = <span class="string">'journo-manifest.json'</span>
+
+<span class="function"><span class="title">loadManifest</span></span> = -&gt;
+  <span class="keyword">do</span> loadConfig
+
+  shared.manifest = <span class="keyword">if</span> fs.existsSync manifestPath
+    JSON.parse fs.readFileSync manifestPath
+  <span class="keyword">else</span>
+    {}
+
+  <span class="keyword">do</span> updateManifest
+  fs.writeFileSync manifestPath, JSON.stringify shared.manifest</pre></div>
+        
+      
+        
+        <p>We update the manifest by looping through every post and every entry in the
+existing manifest, looking for differences in <code>mtime</code>, and recording those
+along with the title and description of each post.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">updateManifest</span></span> = -&gt;
+  manifest = shared.manifest
+  posts = folderContents <span class="string">'posts'</span>
+
+  <span class="keyword">delete</span> manifest[post] <span class="keyword">for</span> post <span class="keyword">of</span> manifest <span class="keyword">when</span> post <span class="keyword">not</span> <span class="keyword">in</span> posts
+
+  <span class="keyword">for</span> post <span class="keyword">in</span> posts
+    stat = fs.statSync postPath post
+    entry = manifest[post]
+    <span class="keyword">if</span> <span class="keyword">not</span> entry <span class="keyword">or</span> entry.mtime <span class="keyword">isnt</span> stat.mtime
+      entry <span class="keyword">or</span>= {pubtime: stat.ctime}
+      entry.mtime = stat.mtime
+      content = fs.readFileSync(postPath post).toString()
+      entry.title = detectTitle content
+      entry.description = detectDescription content, post
+      manifest[post] = entry
+
+  <span class="literal">yes</span></pre></div>
+        
+      
+        
+        <h2>Retina Ready</h2>
+
+        
+      
+        
+        <p>In the future, it may make sense for Journo to have some sort of built-in
+facility for automatically downsizing photos from retina to regular sizes ...
+But for now, this bit is up to you.
+
+
+</p>
+<h2>Syntax Highlight Code</h2>
+
+        
+      
+        
+        <p>We syntax-highlight blocks of code with the nifty <strong>highlight</strong> package that
+includes heuristics for auto-language detection, so you don&#39;t have to specify
+what you&#39;re coding in.
+
+</p>
+
+        
+          <div class='highlight'><pre>{Highlight} = require <span class="string">'highlight'</span>
+
+marked.setOptions
+  highlight: (code, lang) -&gt;
+    Highlight code</pre></div>
+        
+      
+        
+        <h2>Publish a Feed</h2>
+
+        
+      
+        
+        <p>We&#39;ll use the <strong>rss</strong> module to build a simple feed of recent posts. Start with
+the basic <code>author</code>, blog <code>title</code>, <code>description</code> and <code>url</code> configured in the
+<code>config.json</code>. Then, each post&#39;s <code>title</code> is the first header present in the
+post, the <code>description</code> is the first paragraph, and the date is the date you
+first created the post file.
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.<span class="function"><span class="title">feed</span></span> = -&gt;
+  RSS = require <span class="string">'rss'</span>
+  <span class="keyword">do</span> loadConfig
+  config = shared.config
+
+  feed = <span class="keyword">new</span> RSS
+    title: config.title
+    description: config.description
+    feed_url: <span class="string">"<span class="subst">#{shared.siteUrl}</span>/rss.xml"</span>
+    site_url: shared.siteUrl
+    author: config.author
+
+  <span class="keyword">for</span> post <span class="keyword">in</span> sortedPosts()[<span class="number">0.</span>.<span class="number">.20</span>]
+    entry = shared.manifest[post]
+    feed.item
+      title: entry.title
+      description: entry.description
+      url: postUrl post
+      date: entry.pubtime
+
+  feed.xml()</pre></div>
+        
+      
+        
+        <h2>Quickly Bootstrap a New Blog</h2>
+
+        
+      
+        
+        <p>We <strong>init</strong> a new blog into the current directory by copying over the contents
+of a basic <code>bootstrap</code> folder.
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.<span class="function"><span class="title">init</span></span> = -&gt;
+  here = fs.realpathSync <span class="string">'.'</span>
+  <span class="keyword">if</span> fs.existsSync <span class="string">'posts'</span>
+    fatal <span class="string">"A blog already exists in <span class="subst">#{here}</span>"</span>
+  bootstrap = path.join(__dirname, <span class="string">'bootstrap'</span>)
+  exec <span class="string">"rsync -vur --delete <span class="subst">#{bootstrap}</span> ."</span>, (err, stdout, stderr) -&gt;
+    <span class="keyword">throw</span> err <span class="keyword">if</span> err
+    console.log <span class="string">"Initialized new blog in <span class="subst">#{here}</span>"</span></pre></div>
+        
+      
+        
+        <h2>Preview via a Local Server</h2>
+
+        
+      
+        
+        <p>Instead of constantly rebuilding a purely static version of the site, Journo
+provides a preview server (which you can start by just typing <code>journo</code> from
+within your blog).
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.<span class="function"><span class="title">preview</span></span> = -&gt;
+  http = require <span class="string">'http'</span>
+  mime = require <span class="string">'mime'</span>
+  url = require <span class="string">'url'</span>
+  util = require <span class="string">'util'</span>
+  <span class="keyword">do</span> loadManifest
+
+  server = http.createServer (req, res) -&gt;
+    rawPath = url.parse(req.url).pathname.replace(<span class="regexp">/(^\/|\/$)/g</span>, <span class="string">''</span>) <span class="keyword">or</span> <span class="string">'index'</span></pre></div>
+        
+      
+        
+        <p>If the request is for a preview of the RSS feed...
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="keyword">if</span> rawPath <span class="keyword">is</span> <span class="string">'feed.rss'</span>
+      res.writeHead <span class="number">200</span>, <span class="string">'Content-Type'</span>: mime.lookup(<span class="string">'.rss'</span>)
+      res.end Journo.feed()</pre></div>
+        
+      
+        
+        <p>If the request is for a static file that exists in our <code>public</code> directory...
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="keyword">else</span>
+      publicPath = <span class="string">"public/"</span> + rawPath
+      fs.exists publicPath, (exists) -&gt;
+        <span class="keyword">if</span> exists
+          res.writeHead <span class="number">200</span>, <span class="string">'Content-Type'</span>: mime.lookup(publicPath)
+          fs.createReadStream(publicPath).pipe res</pre></div>
+        
+      
+        
+        <p>If the request is for the slug of a valid post, we reload the layout, and
+render it...
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="keyword">else</span>
+          post = <span class="string">"posts/<span class="subst">#{rawPath}</span>.md"</span>
+          fs.exists post, (exists) -&gt;
+            <span class="keyword">if</span> exists
+              loadLayout <span class="literal">true</span>
+              fs.readFile post, (err, content) -&gt;
+                res.writeHead <span class="number">200</span>, <span class="string">'Content-Type'</span>: <span class="string">'text/html'</span>
+                res.end Journo.render post, content</pre></div>
+        
+      
+        
+        <p>Anything else is a 404. (Does anyone know a cross-platform equivalent of the
+OSX <code>open</code> command?)
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="keyword">else</span>
+              res.writeHead <span class="number">404</span>
+              res.end <span class="string">'404 Not Found'</span>
+
+  server.listen <span class="number">1234</span>
+  console.log <span class="string">"Journo is previewing at http://localhost:1234"</span>
+  exec <span class="string">"open http://localhost:1234"</span></pre></div>
+        
+      
+        
+        <h2>Work Without JavaScript, But Default to a Fluid JavaScript-Enabled UI</h2>
+
+        
+      
+        
+        <p>The best way to handle this bit seems to be entirely on the client-side. For
+example, when rendering a JavaScript slideshow of photographs, instead of
+having the server spit out the slideshow code, simply have the blog detect
+the list of images during page load and move them into a slideshow right then
+and there -- using <code>alt</code> attributes for captions, for example.
+
+</p>
+<p>Since the blog is public, it&#39;s nice if search engines can see all of the pieces
+as well as readers.
+
+
+</p>
+<h2>Finally, Putting it all Together. Run Journo From the Terminal</h2>
+
+        
+      
+        
+        <p>We&#39;ll do the simplest possible command-line interface. If a public function
+exists on the <code>Journo</code> object, you can run it. <em>Note that this lets you do
+silly things, like</em> <code>journo toString</code> <em>but no big deal.</em>
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.<span class="function"><span class="title">run</span></span> = -&gt;
+  command = process.argv[<span class="number">2</span>] <span class="keyword">or</span> <span class="string">'preview'</span>
+  <span class="keyword">return</span> <span class="keyword">do</span> Journo[command] <span class="keyword">if</span> Journo[command]
+  console.error <span class="string">"Journo doesn't know how to '<span class="subst">#{command}</span>'"</span></pre></div>
+        
+      
+        
+        <p>Let&#39;s also provide a help page that lists the available commands.
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.help = Journo[<span class="string">'--help'</span>] = -&gt;
+  console.log <span class="string">"""
+    Usage: journo [command]
+
+    If called without a command, `journo` will preview your blog.
+
+    init      start a new blog in the current folder
+    build     build a static version of the blog into 'site'
+    preview   live preview the blog via a local server
+    publish   publish the blog to your remote server
+  """</span></pre></div>
+        
+      
+        
+        <p>And we might as well do the version number, for completeness&#39; sake.
+
+</p>
+
+        
+          <div class='highlight'><pre>Journo.version = Journo[<span class="string">'--version'</span>] = -&gt;
+  console.log <span class="string">"Journo 0.0.1"</span></pre></div>
+        
+      
+        
+        <h2>Miscellaneous Bits and Utilities</h2>
+
+        
+      
+        
+        <p>Little utility functions that are useful up above.
+
+</p>
+<p>The file path to the source of a given <code>post</code>.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">postPath</span></span> = (post) -&gt; <span class="string">"posts/<span class="subst">#{post}</span>"</span></pre></div>
+        
+      
+        
+        <p>The server-side path to the HTML for a given <code>post</code>.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">htmlPath</span></span> = (post) -&gt;
+  name = postName post
+  <span class="keyword">if</span> name <span class="keyword">is</span> <span class="string">'index'</span>
+    <span class="string">'site/index.html'</span>
+  <span class="keyword">else</span>
+    <span class="string">"site/<span class="subst">#{name}</span>/index.html"</span></pre></div>
+        
+      
+        
+        <p>The name (or slug) of a post, taken from the filename.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">postName</span></span> = (post) -&gt; path.basename post, <span class="string">'.md'</span></pre></div>
+        
+      
+        
+        <p>The full, absolute URL for a published post.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">postUrl</span></span> = (post) -&gt; <span class="string">"<span class="subst">#{shared.siteUrl}</span>/<span class="subst">#{postName(post)}</span>/"</span></pre></div>
+        
+      
+        
+        <p>Starting with the string contents of a post, detect the title --
+the first heading.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">detectTitle</span></span> = (content) -&gt;
+  _.find(marked.lexer(content), (token) -&gt; token.type <span class="keyword">is</span> <span class="string">'heading'</span>)?.text</pre></div>
+        
+      
+        
+        <p>Starting with the string contents of a post, detect the description --
+the first paragraph.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">detectDescription</span></span> = (content, post) -&gt;
+  desc = _.find(marked.lexer(content), (token) -&gt; token.type <span class="keyword">is</span> <span class="string">'paragraph'</span>)?.text
+  marked.parser marked.lexer _.template(<span class="string">"<span class="subst">#{desc}</span>..."</span>)(renderVariables(post))</pre></div>
+        
+      
+        
+        <p>Helper function to read in the contents of a folder, ignoring hidden files
+and directories.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">folderContents</span></span> = (folder) -&gt;
+  fs.readdirSync(folder).filter (f) -&gt; f.charAt(<span class="number">0</span>) <span class="keyword">isnt</span> <span class="string">'.'</span></pre></div>
+        
+      
+        
+        <p>Return the list of posts currently in the manifest, sorted by their date of
+publication.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">sortedPosts</span></span> = -&gt;
+  _.sortBy _.without(_.keys(shared.manifest), <span class="string">'index.md'</span>), (post) -&gt;
+    shared.manifest[post].pubtime</pre></div>
+        
+      
+        
+        <p>The shared variables we want to allow our templates (both posts, and layout)
+to use in their evaluations. In the future, it would be nice to determine
+exactly what best belongs here, and provide an easier way for the blog author
+to add functions to it.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">renderVariables</span></span> = (post) -&gt;
+  {
+    _
+    fs
+    path
+    mapLink
+    postName
+    folderContents
+    posts: sortedPosts()
+    post: path.basename(post)
+    manifest: shared.manifest
+  }</pre></div>
+        
+      
+        
+        <p>Quick function which creates a link to a Google Map search for the name of the
+place.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">mapLink</span></span> = (place, additional = <span class="string">''</span>, zoom = <span class="number">15</span>) -&gt;
+  query = encodeURIComponent(<span class="string">"<span class="subst">#{place}</span>, <span class="subst">#{additional}</span>"</span>)
+  <span class="string">"&lt;a href=\"https://maps.google.com/maps?q=<span class="subst">#{query}</span>&amp;t=h&amp;z=<span class="subst">#{zoom}</span>\"&gt;<span class="subst">#{place}</span>&lt;/a&gt;"</span></pre></div>
+        
+      
+        
+        <p>Convenience function for catching errors (keeping the preview server from
+crashing while testing code), and printing them out.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">catchErrors</span></span> = (func) -&gt;
+  <span class="keyword">try</span> <span class="keyword">do</span> func
+  <span class="keyword">catch</span> err
+    console.error err.stack
+    <span class="string">"&lt;pre&gt;<span class="subst">#{err.stack}</span>&lt;/pre&gt;"</span></pre></div>
+        
+      
+        
+        <p>Finally, for errors that you want the app to die on -- things that should break
+the site build.
+
+</p>
+
+        
+          <div class='highlight'><pre><span class="function"><span class="title">fatal</span></span> = (message) -&gt;
+  console.error message
+  process.exit <span class="number">1</span></pre></div>
+        
+      
+      <div class="fleur">h</div>
+    </div>
+  </div>
+</body>
+</html>
