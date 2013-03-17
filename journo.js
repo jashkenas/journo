@@ -177,7 +177,7 @@
     if (fs.existsSync('posts')) {
       fatal("A blog already exists in " + here);
     }
-    bootstrap = path.join(__dirname, 'bootstrap');
+    bootstrap = path.join(__dirname, 'bootstrap/*');
     return exec("rsync -vur --delete " + bootstrap + " .", function(err, stdout, stderr) {
       if (err) {
         throw err;
