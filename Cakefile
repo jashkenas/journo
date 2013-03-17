@@ -6,8 +6,12 @@ task "build", "watch and build the Journo source", ->
   compiler.stdout.on 'data', (data) -> console.log data.toString().trim()
   compiler.stderr.on 'data', (data) -> console.error data.toString().trim()
 
-task "doc", "generate documentation", ->
-  exec "docco -l linear journo.litcoffee"
+task 'doc', 'rebuild the Journo documentation', (options) ->
+  exec([
+    "docco --layout linear journo.litcoffee"
+  ].join(' && '), (err) ->
+    throw err if err
+  )
 
 # Until GitHub has proper Literate CoffeeScript highlighting support, let's
 # manually futz the README ourselves.

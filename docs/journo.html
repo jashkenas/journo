@@ -2,7 +2,7 @@
 
 <html>
 <head>
-  <title>Journo</title>
+  <title>[Journo](http://jashkenas.github.com/journo)</title>
   <meta http-equiv="content-type" content="text/html; charset=UTF-8">
   <link rel="stylesheet" media="all" href="public/stylesheets/normalize.css" />
   <link rel="stylesheet" media="all" href="docco.css" />
@@ -14,7 +14,7 @@
       <div class="header">
         
           
-          <h1>Journo</h1>
+          <h1><a href="http://jashkenas.github.com/journo">Journo</a></h1>
 
           
         
@@ -299,11 +299,14 @@ what you&#39;re coding in.
 </p>
 
         
-          <div class='highlight'><pre>{Highlight} = require <span class="string">'highlight'</span>
+          <div class='highlight'><pre>highlight = require <span class="string">'highlight.js'</span>
 
 marked.setOptions
   highlight: (code, lang) -&gt;
-    Highlight code</pre></div>
+    <span class="keyword">if</span> highlight.LANGUAGES[lang]?
+      highlight.highlight(lang, code, <span class="literal">true</span>).value
+    <span class="keyword">else</span>
+      highlight.highlightAuto(code).value</pre></div>
         
       
         

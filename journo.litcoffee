@@ -1,5 +1,5 @@
-Journo
-======
+[Journo](http://jashkenas.github.com/journo)
+============================================
 
     Journo = module.exports = {}
 
