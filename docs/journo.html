@@ -399,7 +399,7 @@ within your blog).
 </p>
 
         
-          <div class='highlight'><pre><span class="keyword">if</span> rawPath <span class="keyword">is</span> <span class="string">'feed.rss'</span>
+          <div class='highlight'><pre>    <span class="keyword">if</span> rawPath <span class="keyword">is</span> <span class="string">'feed.rss'</span>
       res.writeHead <span class="number">200</span>, <span class="string">'Content-Type'</span>: mime.lookup(<span class="string">'.rss'</span>)
       res.end Journo.feed()</pre></div>
         
@@ -410,7 +410,7 @@ within your blog).
 </p>
 
         
-          <div class='highlight'><pre><span class="keyword">else</span>
+          <div class='highlight'><pre>    <span class="keyword">else</span>
       publicPath = <span class="string">"public/"</span> + rawPath
       fs.exists publicPath, (exists) -&gt;
         <span class="keyword">if</span> exists
@@ -425,7 +425,7 @@ render it...
 </p>
 
         
-          <div class='highlight'><pre><span class="keyword">else</span>
+          <div class='highlight'><pre>        <span class="keyword">else</span>
           post = <span class="string">"posts/<span class="subst">#{rawPath}</span>.md"</span>
           fs.exists post, (exists) -&gt;
             <span class="keyword">if</span> exists
@@ -442,7 +442,7 @@ OSX <code>open</code> command?)
 </p>
 
         
-          <div class='highlight'><pre><span class="keyword">else</span>
+          <div class='highlight'><pre>            <span class="keyword">else</span>
               res.writeHead <span class="number">404</span>
               res.end <span class="string">'404 Not Found'</span>
 

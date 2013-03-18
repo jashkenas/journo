@@ -257,7 +257,7 @@ of a basic `bootstrap` folder.
       here = fs.realpathSync '.'
       if fs.existsSync 'posts'
         fatal "A blog already exists in #{here}"
-      bootstrap = path.join(__dirname, 'bootstrap')
+      bootstrap = path.join(__dirname, 'bootstrap/*')
       exec "rsync -vur --delete #{bootstrap} .", (err, stdout, stderr) ->
         throw err if err
         console.log "Initialized new blog in #{here}"
