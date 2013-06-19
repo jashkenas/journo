@@ -74,6 +74,14 @@ to wrap every page.
       return layout if not force and layout = shared.layout
       shared.layout = _.template(fs.readFileSync('layout.html').toString())
 
+Determine the appropriate command to "open" a url in the browser for the
+current platform.
+
+    opener = switch process.platform
+      when 'darwin' then 'open'
+      when 'win32' then 'start'
+      else 'xdg-open'
+
 
 Publish to Flat Files
 ---------------------
@@ -236,7 +244,7 @@ first created the post file.
         site_url: shared.siteUrl
         author: config.author
 
-      for post in sortedPosts()[0...20]
+      for post in sortedPosts().reverse()[0...20]
         entry = shared.manifest[post]
         feed.item
           title: entry.title
@@ -307,8 +315,7 @@ render it...
                     res.writeHead 200, 'Content-Type': 'text/html'
                     res.end Journo.render post, content
 
-Anything else is a 404. (Does anyone know a cross-platform equivalent of the
-OSX `open` command?)
+Anything else is a 404.
 
                 else
                   res.writeHead 404
@@ -316,7 +323,7 @@ OSX `open` command?)
 
       server.listen 1234
       console.log "Journo is previewing at http://localhost:1234"
-      exec "open http://localhost:1234"
+      exec "#{opener} http://localhost:1234"
 
 
 Work Without JavaScript, But Default to a Fluid JavaScript-Enabled UI
