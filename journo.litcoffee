@@ -142,8 +142,8 @@ the site and **rysnc** it up to the server.
         rsync 'site/', shared.config.publish
 
 A helper function for **rsync**ing, with logging, and the ability to wait for
-the rsync to continue before proceeding. This is useful for ensuring that our
-any new photos have finished uploading (very slowly) before the update to the feed
+the rsync to continue before proceeding. This is useful for ensuring that any 
+new photos have finished uploading (very slowly) before the update to the feed
 is syndicated out.
 
     rsync = (from, to, callback) ->
