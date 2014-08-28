@@ -142,7 +142,7 @@ the site and **rysnc** it up to the server.
         rsync 'site/', shared.config.publish
 
 A helper function for **rsync**ing, with logging, and the ability to wait for
-the rsync to continue before proceeding. This is useful for ensuring that any 
+the rsync to continue before proceeding. This is useful for ensuring that any
 new photos have finished uploading (very slowly) before the update to the feed
 is syndicated out.
 
@@ -218,7 +218,7 @@ what you're coding in.
 
     marked.setOptions
       highlight: (code, lang) ->
-        if highlight.LANGUAGES[lang]?
+        if highlight.getLanguage lang
           highlight.highlight(lang, code, true).value
         else
           highlight.highlightAuto(code).value
@@ -463,7 +463,3 @@ the site build.
     fatal = (message) ->
       console.error message
       process.exit 1
-
-
-
-
