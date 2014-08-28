@@ -5,11 +5,11 @@
   "bin": {"journo": "./bin/journo"},
   "main": "journo.js",
   "dependencies": {
-    "underscore": ">= 1.4.3",
-    "marked": ">= 0.2.6",
-    "mime": ">= 1.2.7",
-    "highlight.js": ">= 7.3.0",
-    "rss": ">= 0.0.4"
+    "underscore": "^1.7.0",
+    "marked": "^0.3.2",
+    "mime": "^1.2.11",
+    "highlight.js": "^8.2.0",
+    "rss": "^0.3.2"
   },
   "devDependencies": {},
   "repository": "",
