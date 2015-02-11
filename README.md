@@ -126,7 +126,7 @@ Publish via rsync
 -----------------
 
 Publishing is nice and rudimentary. We build out an entirely static version of
-the site and **rysnc** it up to the server.
+the site and **rsync** it up to the server.
 ```coffeescript
 Journo.publish = ->
   do Journo.build
