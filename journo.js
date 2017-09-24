@@ -189,7 +189,7 @@
   Journo.init = function() {
     var bootstrap, here;
     here = fs.realpathSync('.');
-    if (fs.existsSync('posts')) {
+    if (fs.existsSync('posts') || fs.existsSync('public')) {
       fatal("A blog already exists in " + here);
     }
     bootstrap = path.join(__dirname, 'bootstrap/*');
@@ -197,6 +197,7 @@
       if (err) {
         throw err;
       }
+      fs.mkdirSync("public");
       return console.log("Initialized new blog in " + here);
     });
   };

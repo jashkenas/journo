@@ -259,15 +259,16 @@ Quickly Bootstrap a New Blog
 ----------------------------
 
 We **init** a new blog into the current directory by copying over the contents
-of a basic `bootstrap` folder.
+of a basic `bootstrap` folder and creating a `public` folder for static content.
 
     Journo.init = ->
       here = fs.realpathSync '.'
-      if fs.existsSync 'posts'
+      if fs.existsSync('posts') or fs.existsSync('public')
         fatal "A blog already exists in #{here}"
       bootstrap = path.join(__dirname, 'bootstrap/*')
       exec "rsync -vur --delete #{bootstrap} .", (err, stdout, stderr) ->
         throw err if err
+        fs.mkdirSync "public"
         console.log "Initialized new blog in #{here}"
 
 
